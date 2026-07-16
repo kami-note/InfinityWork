@@ -11,6 +11,10 @@
     "dev:file-manager": "npm run dev -w services/file-manager",
     "dev:portal": "npm run dev -w apps/portal",
     "build": "npm run build -w packages/shared && npm run build --workspaces --if-present",
-    "lint": "npm run lint --workspaces --if-present"
+    "lint": "npm run lint --workspaces --if-present",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1"
   }
 }

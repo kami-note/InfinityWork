@@ -12,3 +12,6 @@ build/
 data/postgres/
 data/storage/
 .DS_Store
+test-results/
+playwright-report/
+blob-report/

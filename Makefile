@@ -1,4 +1,4 @@
-.PHONY: dev dev-down
+.PHONY: dev dev-down test-e2e
 
 # Starts postgres/auth/file-manager/docs in Docker (ports published to the
 # host via docker-compose.dev.yml) and runs the portal natively with
@@ -18,3 +18,9 @@ dev:
 dev-down:
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml down
 	@lsof -ti:3000 | xargs -r kill 2>/dev/null || true
+
+# Runs the E2E suite (tests/e2e) against an already-running `make dev` stack.
+# Every test creates its own isolated folder via the API and deletes it when
+# done, so this is safe to run against a real account with real data in it.
+test-e2e:
+	npx playwright test
