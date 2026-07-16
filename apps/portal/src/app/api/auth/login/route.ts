@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { AUTH_SERVICE_URL, ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from "@/lib/config";
+import { AUTH_SERVICE_URL } from "@/lib/config";
+import { setAuthCookies } from "@/lib/auth-cookies";
 
 /**
  * The only endpoint where the browser's credentials ever leave the portal.
@@ -22,21 +23,6 @@ export async function POST(request: Request) {
 
   const { accessToken, refreshToken } = await res.json();
   const response = NextResponse.json({ status: "ok" });
-
-  response.cookies.set(ACCESS_TOKEN_COOKIE, accessToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
-    path: "/",
-    maxAge: 60 * 15,
-  });
-  response.cookies.set(REFRESH_TOKEN_COOKIE, refreshToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 7,
-  });
-
+  setAuthCookies(response, { accessToken, refreshToken });
   return response;
 }

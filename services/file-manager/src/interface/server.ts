@@ -181,6 +181,43 @@ app.get(
     const dispositionType = disposition === "inline" ? "inline" : "attachment";
     reply.header("Content-Type", file.mimeType);
     reply.header("Content-Disposition", `${dispositionType}; filename="${encodeURIComponent(file.name)}"`);
+    reply.header("Accept-Ranges", "bytes");
+
+    const totalSize = Number(file.size);
+    const rangeHeader = request.headers.range;
+    // Range requests are what let <video>/<audio> seek and progressively
+    // buffer instead of pulling the whole file up front — this is the
+    // entire "streaming" mechanism, no transcoding involved, so it costs
+    // nothing extra at rest and only reads the bytes actually requested.
+    const match = rangeHeader ? /^bytes=(\d*)-(\d*)$/.exec(rangeHeader) : null;
+
+    if (match) {
+      const [, startStr, endStr] = match;
+      let start = startStr ? parseInt(startStr, 10) : undefined;
+      let end = endStr ? parseInt(endStr, 10) : undefined;
+
+      if (start === undefined && end !== undefined) {
+        // Suffix range ("bytes=-500" = last 500 bytes).
+        start = Math.max(totalSize - end, 0);
+        end = totalSize - 1;
+      } else if (end === undefined) {
+        end = totalSize - 1;
+      }
+
+      if (start === undefined || start > end! || start >= totalSize) {
+        reply.code(416);
+        reply.header("Content-Range", `bytes */${totalSize}`);
+        return reply.send();
+      }
+
+      end = Math.min(end!, totalSize - 1);
+      reply.code(206);
+      reply.header("Content-Range", `bytes ${start}-${end}/${totalSize}`);
+      reply.header("Content-Length", end - start + 1);
+      return reply.send(storage.read(file.storageKey, { start, end }));
+    }
+
+    reply.header("Content-Length", totalSize);
     return reply.send(storage.read(file.storageKey));
   },
 );

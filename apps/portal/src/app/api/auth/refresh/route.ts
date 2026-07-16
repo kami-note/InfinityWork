@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { AUTH_SERVICE_URL, ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from "@/lib/config";
+import { AUTH_SERVICE_URL, REFRESH_TOKEN_COOKIE } from "@/lib/config";
+import { setAuthCookies, clearAuthCookies } from "@/lib/auth-cookies";
 
 export async function POST() {
   const store = await cookies();
@@ -15,26 +16,12 @@ export async function POST() {
 
   if (!res.ok) {
     const response = NextResponse.json({ error: "invalid_refresh_token" }, { status: 401 });
-    response.cookies.delete(ACCESS_TOKEN_COOKIE);
-    response.cookies.delete(REFRESH_TOKEN_COOKIE);
+    clearAuthCookies(response);
     return response;
   }
 
   const { accessToken, refreshToken: newRefreshToken } = await res.json();
   const response = NextResponse.json({ status: "ok" });
-  response.cookies.set(ACCESS_TOKEN_COOKIE, accessToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
-    path: "/",
-    maxAge: 60 * 15,
-  });
-  response.cookies.set(REFRESH_TOKEN_COOKIE, newRefreshToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 7,
-  });
+  setAuthCookies(response, { accessToken, refreshToken: newRefreshToken });
   return response;
 }

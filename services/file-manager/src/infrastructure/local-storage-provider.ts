@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { randomUUID } from "node:crypto";
-import type { StorageProvider, StoredObject } from "../domain/storage-provider.js";
+import type { ByteRange, StorageProvider, StoredObject } from "../domain/storage-provider.js";
 
 export class UploadTooLargeError extends Error {}
 
@@ -55,8 +55,8 @@ export class LocalStorageProvider implements StorageProvider {
     return { storageKey, size, checksumSha256: hash.digest("hex") };
   }
 
-  read(storageKey: string): Readable {
-    return createReadStream(this.pathFor(storageKey));
+  read(storageKey: string, range?: ByteRange): Readable {
+    return createReadStream(this.pathFor(storageKey), range ? { start: range.start, end: range.end } : undefined);
   }
 
   async delete(storageKey: string): Promise<void> {

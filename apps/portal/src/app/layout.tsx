@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { UploadQueueProvider } from "@/components/UploadQueueProvider";
 import { UploadProgressWidget } from "@/components/UploadProgressWidget";
+import { SessionKeepAlive } from "@/components/SessionKeepAlive";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -17,6 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <UploadQueueProvider>
             {children}
             <UploadProgressWidget />
+            <SessionKeepAlive />
           </UploadQueueProvider>
         </ThemeProvider>
       </body>

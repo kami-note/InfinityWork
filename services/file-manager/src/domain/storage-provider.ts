@@ -12,8 +12,13 @@ export interface StoredObject {
  * swapping to an S3-compatible backend later only means writing a new
  * implementation of this interface, no changes to callers.
  */
+export interface ByteRange {
+  start: number;
+  end: number;
+}
+
 export interface StorageProvider {
   write(stream: Readable): Promise<StoredObject>;
-  read(storageKey: string): Readable;
+  read(storageKey: string, range?: ByteRange): Readable;
   delete(storageKey: string): Promise<void>;
 }
