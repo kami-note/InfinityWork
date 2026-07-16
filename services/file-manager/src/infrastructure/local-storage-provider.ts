@@ -1,0 +1,65 @@
+import { createHash } from "node:crypto";
+import { createReadStream, createWriteStream } from "node:fs";
+import { mkdir, rm } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { Readable, Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import { randomUUID } from "node:crypto";
+import type { StorageProvider, StoredObject } from "../domain/storage-provider.js";
+
+export class UploadTooLargeError extends Error {}
+
+/**
+ * Local filesystem backend. Files are shard by the first two hex chars of
+ * their generated UUID (storage/ab/ab12...) so a single directory never
+ * accumulates enough entries to slow down ext4 directory listings.
+ */
+export class LocalStorageProvider implements StorageProvider {
+  constructor(
+    private readonly root: string,
+    private readonly maxBytes: number,
+  ) {}
+
+  private pathFor(storageKey: string): string {
+    return join(this.root, storageKey.slice(0, 2), storageKey);
+  }
+
+  async write(stream: Readable): Promise<StoredObject> {
+    const storageKey = randomUUID();
+    const destPath = this.pathFor(storageKey);
+    await mkdir(dirname(destPath), { recursive: true });
+
+    const hash = createHash("sha256");
+    let size = 0;
+    const maxBytes = this.maxBytes;
+
+    const hashingPassthrough = new Transform({
+      transform(chunk, _enc, callback) {
+        size += chunk.length;
+        if (size > maxBytes) {
+          callback(new UploadTooLargeError(`Upload exceeds ${maxBytes} bytes`));
+          return;
+        }
+        hash.update(chunk);
+        callback(null, chunk);
+      },
+    });
+
+    try {
+      await pipeline(stream, hashingPassthrough, createWriteStream(destPath));
+    } catch (err) {
+      await rm(destPath, { force: true });
+      throw err;
+    }
+
+    return { storageKey, size, checksumSha256: hash.digest("hex") };
+  }
+
+  read(storageKey: string): Readable {
+    return createReadStream(this.pathFor(storageKey));
+  }
+
+  async delete(storageKey: string): Promise<void> {
+    await rm(this.pathFor(storageKey), { force: true });
+  }
+}

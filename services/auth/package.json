@@ -1,0 +1,30 @@
+{
+  "name": "@infinitywork/auth",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/interface/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/interface/server.js",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate deploy",
+    "seed": "tsx src/infrastructure/seed.ts"
+  },
+  "dependencies": {
+    "@infinitywork/shared": "*",
+    "@prisma/client": "^5.22.0",
+    "argon2": "^0.41.1",
+    "fastify": "^5.1.0",
+    "@fastify/cors": "^10.0.1",
+    "zod": "^3.23.8",
+    "ms": "^2.1.3"
+  },
+  "devDependencies": {
+    "prisma": "^5.22.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "@types/node": "^22.9.0",
+    "@types/ms": "^0.7.34"
+  }
+}

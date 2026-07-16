@@ -1,0 +1,11 @@
+node_modules/
+.next/
+dist/
+build/
+src/generated/
+*.log
+.env
+.env.local
+data/postgres/
+data/storage/
+.DS_Store

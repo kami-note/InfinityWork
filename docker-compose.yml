@@ -1,0 +1,82 @@
+name: infinitywork
+
+networks:
+  internal:
+    internal: true
+  public:
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  auth:
+    build:
+      context: .
+      dockerfile: services/auth/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL_AUTH: ${DATABASE_URL_AUTH}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL}
+      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL}
+      PORTAL_ORIGIN: http://portal:3000
+      PORT: 4001
+    # No "ports:" — only reachable from other containers on the internal
+    # network. The portal is the single public entry point.
+    networks: [internal]
+    # The runtime image intentionally has no root package.json (only the
+    # service's own package.json + hoisted node_modules), so these call the
+    # binaries directly instead of going through `npm run -w`.
+    command: sh -c "node_modules/.bin/prisma migrate deploy --schema=services/auth/prisma/schema.prisma && node services/auth/dist/infrastructure/seed.js && node services/auth/dist/interface/server.js"
+
+  file-manager:
+    build:
+      context: .
+      dockerfile: services/file-manager/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL_FILE_MANAGER: ${DATABASE_URL_FILE_MANAGER}
+      JWT_SECRET: ${JWT_SECRET}
+      STORAGE_ROOT: /data/storage
+      STORAGE_MAX_UPLOAD_BYTES: ${STORAGE_MAX_UPLOAD_BYTES}
+      PORTAL_ORIGIN: http://portal:3000
+      PORT: 4002
+    volumes:
+      - ./data/storage:/data/storage
+    networks: [internal]
+    command: sh -c "node_modules/.bin/prisma migrate deploy --schema=services/file-manager/prisma/schema.prisma && node services/file-manager/dist/interface/server.js"
+
+  portal:
+    build:
+      context: .
+      dockerfile: apps/portal/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - auth
+      - file-manager
+    environment:
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL}
+      FILE_MANAGER_SERVICE_URL: ${FILE_MANAGER_SERVICE_URL}
+      NODE_ENV: production
+    ports:
+      - "${PORTAL_PORT}:3000"
+    networks: [internal, public]

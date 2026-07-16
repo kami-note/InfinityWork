@@ -1,0 +1,65 @@
+generator client {
+  provider = "prisma-client-js"
+  // See services/auth/prisma/schema.prisma for why this isn't the default
+  // hoisted node_modules/@prisma/client path.
+  output   = "../src/generated/prisma-client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL_FILE_MANAGER")
+}
+
+enum FilePermissionRole {
+  owner
+  editor
+  viewer
+}
+
+model Folder {
+  id        String    @id @default(uuid())
+  name      String
+  parentId  String?   @map("parent_id")
+  parent    Folder?   @relation("FolderTree", fields: [parentId], references: [id])
+  children  Folder[]  @relation("FolderTree")
+  ownerId   String    @map("owner_id")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+  files     File[]
+
+  @@index([parentId])
+  @@index([ownerId])
+  @@map("folders")
+}
+
+model File {
+  id             String    @id @default(uuid())
+  name           String
+  folderId       String?   @map("folder_id")
+  folder         Folder?   @relation(fields: [folderId], references: [id])
+  ownerId        String    @map("owner_id")
+  storageKey     String    @map("storage_key")
+  size           BigInt
+  mimeType       String    @map("mime_type")
+  checksumSha256 String    @map("checksum_sha256")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
+
+  permissions FilePermission[]
+
+  @@index([folderId])
+  @@index([ownerId])
+  @@map("files")
+}
+
+model FilePermission {
+  fileId String             @map("file_id")
+  userId String             @map("user_id")
+  role   FilePermissionRole
+  file   File               @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@id([fileId, userId])
+  @@map("file_permissions")
+}

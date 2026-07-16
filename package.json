@@ -1,0 +1,16 @@
+{
+  "name": "infinitywork",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "services/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:auth": "npm run dev -w services/auth",
+    "dev:file-manager": "npm run dev -w services/file-manager",
+    "dev:portal": "npm run dev -w apps/portal",
+    "build": "npm run build -w packages/shared && npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present"
+  }
+}
