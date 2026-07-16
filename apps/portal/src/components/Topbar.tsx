@@ -2,6 +2,8 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
+import { Search, LogOut } from "lucide-react";
+import { ThemeToggle } from "./ThemeToggle";
 
 export function Topbar() {
   const router = useRouter();
@@ -20,18 +22,28 @@ export function Topbar() {
   }
 
   return (
-    <div className="flex items-center gap-4 border-b border-neutral-200 p-4 dark:border-neutral-800">
-      <form onSubmit={handleSearch} className="flex-1">
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Buscar arquivos..."
-          className="w-full max-w-md rounded border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
-        />
+    <div className="flex items-center gap-4 border-b border-neutral-200 p-3 dark:border-neutral-800">
+      <form onSubmit={handleSearch} className="max-w-xl flex-1">
+        <div className="flex items-center gap-3 rounded-full bg-neutral-100 px-4 py-2 focus-within:bg-white focus-within:shadow dark:bg-neutral-900 dark:focus-within:bg-neutral-800">
+          <Search size={18} className="shrink-0 text-neutral-500" />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Pesquisar no Drive"
+            className="w-full bg-transparent text-sm outline-none placeholder:text-neutral-500"
+          />
+        </div>
       </form>
-      <button onClick={handleLogout} className="text-sm text-neutral-600 hover:underline dark:text-neutral-400">
-        Sair
-      </button>
+      <div className="flex items-center gap-1">
+        <ThemeToggle />
+        <button
+          onClick={handleLogout}
+          title="Sair"
+          className="flex h-8 w-8 items-center justify-center rounded-full text-neutral-600 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-800"
+        >
+          <LogOut size={18} />
+        </button>
+      </div>
     </div>
   );
 }

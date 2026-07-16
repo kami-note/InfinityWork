@@ -5,6 +5,7 @@ import { PERMISSIONS, createAuthPlugin } from "@infinitywork/shared";
 import { LocalStorageProvider } from "../infrastructure/local-storage-provider.js";
 import * as folderService from "../application/folder-service.js";
 import * as fileService from "../application/file-service.js";
+import { copyFolder } from "../application/copy-service.js";
 import { requireFileRole, ForbiddenResourceError } from "../application/access-control.js";
 
 const STORAGE_ROOT = process.env.STORAGE_ROOT ?? "/data/storage";
@@ -70,6 +71,16 @@ app.delete(
   async (request) => {
     const { id } = request.params as { id: string };
     return folderService.softDeleteFolder(id);
+  },
+);
+
+app.post(
+  "/folders/:id/copy",
+  { preHandler: app.requirePermission(PERMISSIONS.files.folder.create) },
+  async (request) => {
+    const { id } = request.params as { id: string };
+    const { targetParentId } = request.body as { targetParentId: string | null };
+    return copyFolder(storage, { id, ownerId: request.user!.sub, targetParentId, rename: true });
   },
 );
 
@@ -173,6 +184,22 @@ app.patch(
   },
 );
 
+app.post(
+  "/files/:id/copy",
+  { preHandler: app.requirePermission(PERMISSIONS.files.file.upload) },
+  async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      await requireFileRole(id, request.user!.sub, "viewer");
+    } catch (err) {
+      if (err instanceof ForbiddenResourceError) return reply.code(403).send({ error: "forbidden" });
+      throw err;
+    }
+    const { targetFolderId } = request.body as { targetFolderId: string | null };
+    return fileService.copyFile(storage, { id, ownerId: request.user!.sub, targetFolderId, rename: true });
+  },
+);
+
 app.delete(
   "/files/:id",
   { preHandler: app.requirePermission(PERMISSIONS.files.file.delete) },
@@ -228,6 +255,10 @@ app.post(
 app.get("/search", { preHandler: app.requireAuth }, async (request) => {
   const { q } = request.query as { q?: string };
   return fileService.searchFiles(request.user!.sub, q ?? "");
+});
+
+app.get("/storage/usage", { preHandler: app.requireAuth }, async (request) => {
+  return fileService.getStorageUsage(request.user!.sub);
 });
 
 const port = Number(process.env.PORT ?? 4002);

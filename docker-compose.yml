@@ -1,8 +1,12 @@
 name: infinitywork
 
 networks:
+  # NOTE: this network intentionally does NOT set `internal: true`. That flag
+  # blocks host port-publishing entirely under rootless Docker (verified by
+  # isolating the variable), which breaks the portal's own published port.
+  # Isolation from the host is already achieved by simply not declaring
+  # `ports:` on auth/file-manager/docs — only the portal does.
   internal:
-    internal: true
   public:
 
 services:

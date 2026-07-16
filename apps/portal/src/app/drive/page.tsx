@@ -4,10 +4,9 @@ import { listFolder, searchFiles } from "@/lib/file-manager-client";
 import { Sidebar } from "@/components/Sidebar";
 import { Topbar } from "@/components/Topbar";
 import { Breadcrumb } from "@/components/Breadcrumb";
-import { NewFolderButton } from "@/components/NewFolderButton";
-import { NewDocumentButton } from "@/components/NewDocumentButton";
 import { UploadDropzone } from "@/components/UploadDropzone";
-import { ItemCard } from "@/components/ItemCard";
+import { DriveGrid } from "@/components/DriveGrid";
+import type { DriveItem } from "@/components/DriveItemTile";
 
 export default async function DrivePage({
   searchParams,
@@ -19,6 +18,7 @@ export default async function DrivePage({
 
   if (q) {
     const results = await searchFiles(token, q);
+    const items: DriveItem[] = results.map((file) => ({ kind: "file", ...file }));
     return (
       <div className="flex min-h-screen">
         <Sidebar />
@@ -26,16 +26,11 @@ export default async function DrivePage({
           <Suspense>
             <Topbar />
           </Suspense>
-          <div className="p-6">
-            <h2 className="mb-4 text-sm text-neutral-600 dark:text-neutral-400">
+          <div className="space-y-4 p-6">
+            <h2 className="text-sm text-neutral-600 dark:text-neutral-400">
               Resultados para &quot;{q}&quot;
             </h2>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 md:grid-cols-6">
-              {results.map((file) => (
-                <ItemCard key={file.id} item={{ kind: "file", ...file }} />
-              ))}
-              {results.length === 0 && <p className="text-sm text-neutral-500">Nenhum arquivo encontrado.</p>}
-            </div>
+            <DriveGrid items={items} emptyLabel="Nenhum arquivo encontrado." />
           </div>
         </main>
       </div>
@@ -43,36 +38,24 @@ export default async function DrivePage({
   }
 
   const contents = await listFolder(token, folderId ?? null);
+  const items: DriveItem[] = [
+    ...contents.folders.map((folder): DriveItem => ({ kind: "folder", id: folder.id, name: folder.name, updatedAt: folder.updatedAt })),
+    ...contents.files.map((file): DriveItem => ({ kind: "file", ...file })),
+  ];
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar />
+      <Sidebar parentId={folderId ?? null} />
       <main className="flex-1">
         <Suspense>
           <Topbar />
         </Suspense>
         <div className="space-y-4 p-6">
-          <div className="flex items-center justify-between">
-            <Breadcrumb trail={contents.breadcrumb} />
-            <div className="flex items-center gap-2">
-              <NewDocumentButton parentId={folderId ?? null} />
-              <NewFolderButton parentId={folderId ?? null} />
-            </div>
-          </div>
+          <Breadcrumb trail={contents.breadcrumb} />
 
           <UploadDropzone folderId={folderId ?? null} />
 
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 md:grid-cols-6">
-            {contents.folders.map((folder) => (
-              <ItemCard key={folder.id} item={{ kind: "folder", id: folder.id, name: folder.name }} />
-            ))}
-            {contents.files.map((file) => (
-              <ItemCard key={file.id} item={{ kind: "file", ...file }} />
-            ))}
-          </div>
-          {contents.folders.length === 0 && contents.files.length === 0 && (
-            <p className="text-sm text-neutral-500">Esta pasta está vazia.</p>
-          )}
+          <DriveGrid items={items} emptyLabel="Esta pasta está vazia." folderId={folderId ?? null} />
         </div>
       </main>
     </div>

@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { UploadCloud } from "lucide-react";
 
 export function UploadDropzone({ folderId }: { folderId: string | null }) {
   const router = useRouter();
@@ -38,6 +39,7 @@ export function UploadDropzone({ folderId }: { folderId: string | null }) {
         dragging ? "border-blue-500 bg-blue-50 dark:bg-blue-950" : "border-neutral-300 dark:border-neutral-700"
       }`}
     >
+      <UploadCloud size={28} className="mx-auto mb-2 text-neutral-400" />
       <p className="mb-2 text-neutral-600 dark:text-neutral-400">
         {uploading ? "Enviando..." : "Arraste arquivos aqui ou"}
       </p>

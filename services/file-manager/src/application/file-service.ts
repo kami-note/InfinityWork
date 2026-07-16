@@ -45,6 +45,32 @@ export async function updateFileContent(
   return updated;
 }
 
+/**
+ * Duplicates a file's physical bytes into a new storage object and a new
+ * DB row — a real copy, not a reference, since there's no dedup/refcounting
+ * in this storage model. `rename` controls whether the top-level copy gets
+ * the "Cópia de ..." prefix (used for a direct copy) or keeps the original
+ * name (used for files nested inside a folder being copied).
+ */
+export async function copyFile(
+  storage: StorageProvider,
+  params: { id: string; ownerId: string; targetFolderId: string | null; rename: boolean },
+) {
+  const original = await prisma.file.findUniqueOrThrow({ where: { id: params.id } });
+  const stored = await storage.write(storage.read(original.storageKey));
+  return prisma.file.create({
+    data: {
+      name: params.rename ? `Cópia de ${original.name}` : original.name,
+      folderId: params.targetFolderId,
+      ownerId: params.ownerId,
+      storageKey: stored.storageKey,
+      size: stored.size,
+      mimeType: original.mimeType,
+      checksumSha256: stored.checksumSha256,
+    },
+  });
+}
+
 export async function renameFile(id: string, name: string) {
   return prisma.file.update({ where: { id }, data: { name } });
 }
@@ -98,4 +124,12 @@ export async function shareFile(fileId: string, userId: string, role: "owner" | 
 
 export async function getFile(id: string) {
   return prisma.file.findUniqueOrThrow({ where: { id } });
+}
+
+export async function getStorageUsage(ownerId: string): Promise<{ totalBytes: string }> {
+  const result = await prisma.file.aggregate({
+    where: { ownerId, deletedAt: null },
+    _sum: { size: true },
+  });
+  return { totalBytes: (result._sum.size ?? 0n).toString() };
 }

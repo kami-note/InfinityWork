@@ -4,6 +4,7 @@ export interface FolderDto {
   id: string;
   name: string;
   parentId: string | null;
+  updatedAt: string;
 }
 
 export interface FileDto {
@@ -13,6 +14,7 @@ export interface FileDto {
   size: string;
   mimeType: string;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface FolderContents {
@@ -50,12 +52,28 @@ export function deleteFolder(token: string, id: string) {
   return call(token, `/folders/${id}`, { method: "DELETE" });
 }
 
+export function moveFolder(token: string, id: string, parentId: string | null) {
+  return call(token, `/folders/${id}/move`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ parentId }) });
+}
+
+export function copyFolder(token: string, id: string, targetParentId: string | null) {
+  return call(token, `/folders/${id}/copy`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ targetParentId }) });
+}
+
 export function renameFile(token: string, id: string, name: string) {
   return call(token, `/files/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) });
 }
 
 export function deleteFile(token: string, id: string) {
   return call(token, `/files/${id}`, { method: "DELETE" });
+}
+
+export function moveFile(token: string, id: string, folderId: string | null) {
+  return call(token, `/files/${id}/move`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ folderId }) });
+}
+
+export function copyFile(token: string, id: string, targetFolderId: string | null) {
+  return call(token, `/files/${id}/copy`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ targetFolderId }) });
 }
 
 export function restoreFile(token: string, id: string) {
@@ -76,4 +94,8 @@ export function searchFiles(token: string, q: string): Promise<FileDto[]> {
 
 export function shareFile(token: string, id: string, userId: string, role: "owner" | "editor" | "viewer") {
   return call(token, `/files/${id}/share`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId, role }) });
+}
+
+export function getStorageUsage(token: string): Promise<{ totalBytes: string }> {
+  return call(token, "/storage/usage");
 }

@@ -1,0 +1,18 @@
+# Local-dev override: publishes the backend services' ports to the host so
+# `npm run dev` (running outside Docker, e.g. the portal) can reach them
+# directly. Never used by default — only applied when explicitly passed
+# with -f, so production (`docker compose up`) stays internal-only.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres auth file-manager docs
+#   cd apps/portal && npm run dev   # hot reload, no image rebuild
+services:
+  auth:
+    ports:
+      - "4001:4001"
+  file-manager:
+    ports:
+      - "4002:4002"
+  docs:
+    ports:
+      - "4003:4003"

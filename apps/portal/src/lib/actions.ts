@@ -56,6 +56,35 @@ export async function emptyTrashAction() {
   revalidatePath("/trash");
 }
 
+export async function bulkDeleteAction(items: { id: string; kind: "folder" | "file" }[]) {
+  const token = await requireAccessToken();
+  await Promise.all(
+    items.map((item) => (item.kind === "folder" ? fm.deleteFolder(token, item.id) : fm.deleteFile(token, item.id))),
+  );
+  revalidatePath("/drive");
+  revalidatePath("/trash");
+}
+
+export async function moveItemsAction(items: { id: string; kind: "folder" | "file" }[], targetFolderId: string | null) {
+  const token = await requireAccessToken();
+  await Promise.all(
+    items.map((item) =>
+      item.kind === "folder" ? fm.moveFolder(token, item.id, targetFolderId) : fm.moveFile(token, item.id, targetFolderId),
+    ),
+  );
+  revalidatePath("/drive");
+}
+
+export async function copyItemsAction(items: { id: string; kind: "folder" | "file" }[], targetFolderId: string | null) {
+  const token = await requireAccessToken();
+  await Promise.all(
+    items.map((item) =>
+      item.kind === "folder" ? fm.copyFolder(token, item.id, targetFolderId) : fm.copyFile(token, item.id, targetFolderId),
+    ),
+  );
+  revalidatePath("/drive");
+}
+
 export async function shareFileAction(id: string, userId: string, role: "owner" | "editor" | "viewer") {
   const token = await requireAccessToken();
   await fm.shareFile(token, id, userId, role);
