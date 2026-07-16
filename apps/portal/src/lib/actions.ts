@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireAccessToken } from "./session";
 import * as fm from "./file-manager-client";
+import * as docs from "./docs-client";
 
 export async function createFolderAction(name: string, parentId: string | null) {
   const token = await requireAccessToken();
@@ -20,6 +21,13 @@ export async function deleteFolderAction(id: string) {
   const token = await requireAccessToken();
   await fm.deleteFolder(token, id);
   revalidatePath("/drive");
+}
+
+export async function createDocumentAction(name: string, folderId: string | null) {
+  const token = await requireAccessToken();
+  const file = await docs.createDocument(token, name, folderId);
+  revalidatePath("/drive");
+  return file;
 }
 
 export async function renameFileAction(id: string, name: string) {

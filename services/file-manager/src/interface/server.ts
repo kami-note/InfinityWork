@@ -1,8 +1,7 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
-import { PERMISSIONS } from "@infinitywork/shared";
-import { authPlugin } from "./auth-plugin.js";
+import { PERMISSIONS, createAuthPlugin } from "@infinitywork/shared";
 import { LocalStorageProvider } from "../infrastructure/local-storage-provider.js";
 import * as folderService from "../application/folder-service.js";
 import * as fileService from "../application/file-service.js";
@@ -23,7 +22,7 @@ const app = Fastify({ logger: true });
 
 await app.register(cors, { origin: process.env.PORTAL_ORIGIN ?? "http://portal:3000" });
 await app.register(multipart, { limits: { fileSize: MAX_UPLOAD_BYTES } });
-await app.register(authPlugin);
+await app.register(createAuthPlugin(process.env.JWT_SECRET!));
 
 app.get("/health", async () => ({ status: "ok" }));
 
@@ -87,6 +86,33 @@ app.post(
         ownerId: request.user!.sub,
         folderId,
         name: data.filename,
+        mimeType: data.mimetype,
+        stream: data.file,
+      });
+      return file;
+    } catch (err) {
+      return reply.code(413).send({ error: "upload_too_large" });
+    }
+  },
+);
+
+app.put(
+  "/files/:id/content",
+  { preHandler: app.requirePermission(PERMISSIONS.files.file.upload) },
+  async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      await requireFileRole(id, request.user!.sub, "editor");
+    } catch (err) {
+      if (err instanceof ForbiddenResourceError) return reply.code(403).send({ error: "forbidden" });
+      throw err;
+    }
+    const data = await request.file();
+    if (!data) return reply.code(400).send({ error: "no_file" });
+
+    try {
+      const file = await fileService.updateFileContent(storage, {
+        id,
         mimeType: data.mimetype,
         stream: data.file,
       });

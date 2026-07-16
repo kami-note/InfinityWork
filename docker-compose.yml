@@ -65,6 +65,22 @@ services:
     networks: [internal]
     command: sh -c "node_modules/.bin/prisma migrate deploy --schema=services/file-manager/prisma/schema.prisma && node services/file-manager/dist/interface/server.js"
 
+  docs:
+    build:
+      context: .
+      dockerfile: services/docs/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - file-manager
+    environment:
+      JWT_SECRET: ${JWT_SECRET}
+      FILE_MANAGER_SERVICE_URL: ${FILE_MANAGER_SERVICE_URL}
+      PORTAL_ORIGIN: http://portal:3000
+      PORT: 4003
+    # No own database: document content lives in file-manager, docs only
+    # orchestrates + converts (JSON -> HTML -> docx). See services/docs.
+    networks: [internal]
+
   portal:
     build:
       context: .
@@ -73,9 +89,11 @@ services:
     depends_on:
       - auth
       - file-manager
+      - docs
     environment:
       AUTH_SERVICE_URL: ${AUTH_SERVICE_URL}
       FILE_MANAGER_SERVICE_URL: ${FILE_MANAGER_SERVICE_URL}
+      DOCS_SERVICE_URL: ${DOCS_SERVICE_URL}
       NODE_ENV: production
     ports:
       - "${PORTAL_PORT}:3000"

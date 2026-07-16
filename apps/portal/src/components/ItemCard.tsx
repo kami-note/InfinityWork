@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { DOCUMENT_MIME_TYPE } from "@infinitywork/shared";
 import { renameFolderAction, deleteFolderAction, renameFileAction, deleteFileAction } from "@/lib/actions";
 
 type Item =
@@ -35,9 +36,11 @@ export function ItemCard({ item }: { item: Item }) {
     router.refresh();
   }
 
+  const isDocument = item.kind === "file" && item.mimeType === DOCUMENT_MIME_TYPE;
+
   const content = (
     <div className="group relative flex flex-col items-center rounded-lg border border-transparent p-4 text-center hover:border-neutral-200 hover:bg-neutral-50 dark:hover:border-neutral-800 dark:hover:bg-neutral-900">
-      <div className="mb-2 text-4xl">{item.kind === "folder" ? "📁" : "📄"}</div>
+      <div className="mb-2 text-4xl">{item.kind === "folder" ? "📁" : isDocument ? "📝" : "📄"}</div>
       <div className="w-full truncate text-sm">{item.name}</div>
       {item.kind === "file" && (
         <div className="text-xs text-neutral-500">{formatSize(item.size)}</div>
@@ -58,10 +61,10 @@ export function ItemCard({ item }: { item: Item }) {
         >
           {item.kind === "file" && (
             <a
-              href={`/api/files/${item.id}/download`}
+              href={isDocument ? `/api/docs/${item.id}/export` : `/api/files/${item.id}/download`}
               className="block px-3 py-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800"
             >
-              Baixar
+              {isDocument ? "Baixar .docx" : "Baixar"}
             </a>
           )}
           <button onClick={handleRename} className="block w-full px-3 py-1.5 text-left hover:bg-neutral-100 dark:hover:bg-neutral-800">
@@ -77,6 +80,9 @@ export function ItemCard({ item }: { item: Item }) {
 
   if (item.kind === "folder") {
     return <Link href={`/drive?folderId=${item.id}`}>{content}</Link>;
+  }
+  if (isDocument) {
+    return <Link href={`/docs/${item.id}`}>{content}</Link>;
   }
   return content;
 }

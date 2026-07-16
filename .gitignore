@@ -2,7 +2,10 @@ node_modules/
 .next/
 dist/
 build/
-src/generated/
+# A pattern with a slash in the middle (like "src/generated/") is anchored
+# to this file's directory in git — it wouldn't match services/*/src/generated.
+# "**/generated/" matches the Prisma Client output at any depth.
+**/generated/
 *.log
 .env
 .env.local

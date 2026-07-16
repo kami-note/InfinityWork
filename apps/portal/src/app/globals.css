@@ -9,3 +9,19 @@
 body {
   @apply bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100;
 }
+
+.tiptap-content h1 {
+  @apply mb-3 mt-4 text-2xl font-semibold;
+}
+.tiptap-content h2 {
+  @apply mb-2 mt-3 text-xl font-semibold;
+}
+.tiptap-content p {
+  @apply mb-2 leading-relaxed;
+}
+.tiptap-content ul {
+  @apply mb-2 list-disc pl-6;
+}
+.tiptap-content ol {
+  @apply mb-2 list-decimal pl-6;
+}

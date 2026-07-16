@@ -20,6 +20,31 @@ export async function uploadFile(
   });
 }
 
+/**
+ * Overwrites the physical bytes of an existing file while keeping the same
+ * file id — used by the docs module so saving a document updates the same
+ * Drive item instead of spawning a new file on every save. The old physical
+ * object is deleted only after the new one is safely written.
+ */
+export async function updateFileContent(
+  storage: StorageProvider,
+  params: { id: string; mimeType: string; stream: Readable },
+) {
+  const existing = await prisma.file.findUniqueOrThrow({ where: { id: params.id } });
+  const stored = await storage.write(params.stream);
+  const updated = await prisma.file.update({
+    where: { id: params.id },
+    data: {
+      storageKey: stored.storageKey,
+      size: stored.size,
+      mimeType: params.mimeType,
+      checksumSha256: stored.checksumSha256,
+    },
+  });
+  await storage.delete(existing.storageKey);
+  return updated;
+}
+
 export async function renameFile(id: string, name: string) {
   return prisma.file.update({ where: { id }, data: { name } });
 }

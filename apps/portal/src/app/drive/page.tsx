@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { Topbar } from "@/components/Topbar";
 import { Breadcrumb } from "@/components/Breadcrumb";
 import { NewFolderButton } from "@/components/NewFolderButton";
+import { NewDocumentButton } from "@/components/NewDocumentButton";
 import { UploadDropzone } from "@/components/UploadDropzone";
 import { ItemCard } from "@/components/ItemCard";
 
@@ -53,7 +54,10 @@ export default async function DrivePage({
         <div className="space-y-4 p-6">
           <div className="flex items-center justify-between">
             <Breadcrumb trail={contents.breadcrumb} />
-            <NewFolderButton parentId={folderId ?? null} />
+            <div className="flex items-center gap-2">
+              <NewDocumentButton parentId={folderId ?? null} />
+              <NewFolderButton parentId={folderId ?? null} />
+            </div>
           </div>
 
           <UploadDropzone folderId={folderId ?? null} />

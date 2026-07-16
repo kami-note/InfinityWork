@@ -24,6 +24,13 @@ export const PERMISSIONS = {
       empty: "files.trash.empty",
     },
   },
+  docs: {
+    document: {
+      create: "docs.document.create",
+      edit: "docs.document.edit",
+      export: "docs.document.export",
+    },
+  },
   users: {
     user: {
       invite: "users.user.invite",
@@ -52,6 +59,9 @@ export const DEFAULT_ROLES = {
     PERMISSIONS.files.file.move,
     PERMISSIONS.files.file.share,
     PERMISSIONS.files.trash.restore,
+    PERMISSIONS.docs.document.create,
+    PERMISSIONS.docs.document.edit,
+    PERMISSIONS.docs.document.export,
   ],
   viewer: [PERMISSIONS.files.file.download],
 } as const;
