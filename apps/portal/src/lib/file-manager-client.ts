@@ -35,6 +35,10 @@ async function call<T>(token: string, path: string, init?: RequestInit): Promise
   return res.json() as Promise<T>;
 }
 
+export function getFile(token: string, id: string): Promise<FileDto> {
+  return call(token, `/files/${id}`);
+}
+
 export function listFolder(token: string, parentId: string | null): Promise<FolderContents> {
   const qs = parentId ? `?parentId=${encodeURIComponent(parentId)}` : "";
   return call(token, `/folders${qs}`);

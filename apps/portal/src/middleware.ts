@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ACCESS_TOKEN_COOKIE } from "@/lib/config";
 
-const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/auth/refresh"];
+const PUBLIC_PATHS = ["/login"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -18,5 +18,9 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // Excludes /api/* too: every API route already enforces auth itself via
+  // requireAccessToken(), and Next.js's middleware runs in the Edge runtime,
+  // which silently truncates large request bodies — routing big uploads
+  // through it broke file uploads above ~10MB with no useful error.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/).*)"],
 };

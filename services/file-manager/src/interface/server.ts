@@ -2,7 +2,7 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import { PERMISSIONS, createAuthPlugin } from "@infinitywork/shared";
-import { LocalStorageProvider } from "../infrastructure/local-storage-provider.js";
+import { LocalStorageProvider, UploadTooLargeError } from "../infrastructure/local-storage-provider.js";
 import * as folderService from "../application/folder-service.js";
 import * as fileService from "../application/file-service.js";
 import { copyFolder } from "../application/copy-service.js";
@@ -19,7 +19,11 @@ const storage = new LocalStorageProvider(STORAGE_ROOT, MAX_UPLOAD_BYTES);
   return this.toString();
 };
 
-const app = Fastify({ logger: true });
+// Fastify's own default bodyLimit is 1MB and applies to the raw request
+// regardless of @fastify/multipart's `limits.fileSize` — without this,
+// every upload above ~1MB was rejected before multipart even saw it,
+// no matter what STORAGE_MAX_UPLOAD_BYTES said.
+const app = Fastify({ logger: true, bodyLimit: MAX_UPLOAD_BYTES });
 
 await app.register(cors, { origin: process.env.PORTAL_ORIGIN ?? "http://portal:3000" });
 await app.register(multipart, { limits: { fileSize: MAX_UPLOAD_BYTES } });
@@ -102,7 +106,12 @@ app.post(
       });
       return file;
     } catch (err) {
-      return reply.code(413).send({ error: "upload_too_large" });
+      if (err instanceof UploadTooLargeError) return reply.code(413).send({ error: "upload_too_large" });
+      // Surface the real cause instead of masking every failure as "too
+      // large" — that swallowed genuine bugs (disk errors, stream issues)
+      // behind a misleading error the first time this code shipped.
+      request.log.error(err);
+      return reply.code(500).send({ error: "upload_failed" });
     }
   },
 );
@@ -129,8 +138,25 @@ app.put(
       });
       return file;
     } catch (err) {
-      return reply.code(413).send({ error: "upload_too_large" });
+      if (err instanceof UploadTooLargeError) return reply.code(413).send({ error: "upload_too_large" });
+      request.log.error(err);
+      return reply.code(500).send({ error: "upload_failed" });
     }
+  },
+);
+
+app.get(
+  "/files/:id",
+  { preHandler: app.requirePermission(PERMISSIONS.files.file.download) },
+  async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      await requireFileRole(id, request.user!.sub, "viewer");
+    } catch (err) {
+      if (err instanceof ForbiddenResourceError) return reply.code(403).send({ error: "forbidden" });
+      throw err;
+    }
+    return fileService.getFile(id);
   },
 );
 
@@ -146,8 +172,15 @@ app.get(
       throw err;
     }
     const file = await fileService.getFile(id);
+    // "inline" lets the browser render the bytes in place (used by the
+    // in-app viewer for PDFs/images/video/audio) — plain navigation or an
+    // <iframe> honors Content-Disposition, so "attachment" would force a
+    // download dialog instead of showing the PDF. The explicit "Baixar"
+    // links still get the default (attachment) behavior.
+    const { disposition } = request.query as { disposition?: string };
+    const dispositionType = disposition === "inline" ? "inline" : "attachment";
     reply.header("Content-Type", file.mimeType);
-    reply.header("Content-Disposition", `attachment; filename="${encodeURIComponent(file.name)}"`);
+    reply.header("Content-Disposition", `${dispositionType}; filename="${encodeURIComponent(file.name)}"`);
     return reply.send(storage.read(file.storageKey));
   },
 );

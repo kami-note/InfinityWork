@@ -133,6 +133,7 @@ export function DriveGrid({
   function openItem(item: DriveItem) {
     if (item.kind === "folder") router.push(`/drive?folderId=${item.id}`);
     else if (item.mimeType === DOCUMENT_MIME_TYPE) router.push(`/docs/${item.id}`);
+    else router.push(`/view/${item.id}`);
   }
 
   function handleItemClick(item: DriveItem, e: React.MouseEvent) {

@@ -22,8 +22,12 @@ export async function createDocumentFile(
 ): Promise<FileManagerFile> {
   const body = new FormData();
   const blob = new Blob([JSON.stringify(params.content)], { type: DOCUMENT_MIME_TYPE });
-  body.append("file", blob, params.name);
+  // Field order matters: file-manager's request.file() reads the parsed
+  // fields as soon as it sees the file part, before anything placed after
+  // it in the multipart body has been parsed — folderId has to come first
+  // or it's silently lost (see UploadQueueProvider.tsx for the same fix).
   if (params.folderId) body.append("folderId", params.folderId);
+  body.append("file", blob, params.name);
 
   const res = await fetch(`${FILE_MANAGER_URL}/files`, {
     method: "POST",
