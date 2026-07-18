@@ -10,18 +10,89 @@ body {
   @apply bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100;
 }
 
+/* Heading levels back the toolbar's paragraph-style dropdown: 1=Título,
+   2=Subtítulo, 3-5=Título 1-3 — see STYLE_OPTIONS in DocumentToolbar.tsx. */
 .tiptap-content h1 {
-  @apply mb-3 mt-4 text-2xl font-semibold;
+  @apply mb-4 mt-4 text-4xl font-bold;
 }
 .tiptap-content h2 {
+  @apply mb-3 mt-3 text-xl font-normal text-neutral-500;
+}
+.tiptap-content h3 {
+  @apply mb-2 mt-4 text-2xl font-semibold;
+}
+.tiptap-content h4 {
   @apply mb-2 mt-3 text-xl font-semibold;
+}
+.tiptap-content h5 {
+  @apply mb-2 mt-3 text-lg font-semibold;
 }
 .tiptap-content p {
   @apply mb-2 leading-relaxed;
+}
+.tiptap-content .ProseMirror {
+  @apply min-h-full outline-none;
 }
 .tiptap-content ul {
   @apply mb-2 list-disc pl-6;
 }
 .tiptap-content ol {
   @apply mb-2 list-decimal pl-6;
+}
+.tiptap-content ul[data-type="taskList"] {
+  @apply mb-2 list-none pl-0;
+}
+.tiptap-content ul[data-type="taskList"] li {
+  @apply flex items-start gap-2;
+}
+.tiptap-content ul[data-type="taskList"] li > label {
+  @apply mt-1;
+}
+.tiptap-content blockquote {
+  @apply mb-2 border-l-4 border-neutral-300 pl-4 italic text-neutral-600;
+}
+.tiptap-content pre {
+  @apply mb-2 overflow-x-auto rounded bg-neutral-900 p-3 text-sm text-neutral-100;
+}
+.tiptap-content code {
+  @apply rounded bg-neutral-100 px-1 py-0.5 text-sm;
+}
+.tiptap-content pre code {
+  @apply bg-transparent p-0;
+}
+.tiptap-content a {
+  @apply text-blue-600 underline;
+}
+.tiptap-content img {
+  @apply my-2 max-w-full rounded;
+}
+.tiptap-content hr {
+  @apply my-4 border-neutral-300;
+}
+/* Manual page break: a transparent spacer, not a visible band. The stacked
+   background page sheets (rendered in DocumentEditor.tsx, one per computed
+   page) are what shows "this page ends here" now — this only needs to
+   occupy the right amount of vertical space (closing the current page's
+   bottom margin + the gap between sheets + the next page's top margin) so
+   the following content lands inside the next sheet's content area. Same
+   formula the automatic version in tiptap-pagination.ts uses for its
+   `breakHeight`; see lib/tiptap-page-break.ts for why breaks are manual
+   *and* auto rather than true reflow pagination. */
+.tiptap-content div[data-page-break] {
+  height: calc(var(--page-gap, 32px) + 2 * var(--page-margin, 96px));
+  margin-left: calc(-1 * var(--page-margin, 96px));
+  margin-right: calc(-1 * var(--page-margin, 96px));
+}
+.tiptap-content table {
+  @apply my-2 w-full border-collapse;
+}
+.tiptap-content th,
+.tiptap-content td {
+  @apply border border-neutral-300 px-3 py-1.5 text-left align-top;
+}
+.tiptap-content th {
+  @apply bg-neutral-100 font-semibold;
+}
+.tiptap-content .selectedCell {
+  @apply bg-blue-50;
 }

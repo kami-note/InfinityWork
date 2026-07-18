@@ -46,6 +46,18 @@ export async function downloadDocumentContent(token: string, fileId: string): Pr
   return res.json();
 }
 
+export async function downloadFileBytes(
+  token: string,
+  fileId: string,
+): Promise<{ buffer: Buffer; mimeType: string } | null> {
+  const res = await fetch(`${FILE_MANAGER_URL}/files/${fileId}/download`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return null;
+  const buffer = Buffer.from(await res.arrayBuffer());
+  return { buffer, mimeType: res.headers.get("content-type") ?? "application/octet-stream" };
+}
+
 export async function saveDocumentContent(
   token: string,
   fileId: string,
