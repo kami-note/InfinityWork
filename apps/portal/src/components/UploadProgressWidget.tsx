@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronUp, X, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronUp, X, CheckCircle2, XCircle, Loader2, Clock } from "lucide-react";
 import { useUploadQueue } from "./UploadQueueProvider";
 import { FileTypeIcon } from "@/lib/file-icon";
 
@@ -12,12 +12,16 @@ export function UploadProgressWidget() {
   if (uploads.length === 0) return null;
 
   const uploading = uploads.filter((u) => u.status === "uploading").length;
+  const queued = uploads.filter((u) => u.status === "queued").length;
   const done = uploads.filter((u) => u.status === "done").length;
   const failed = uploads.filter((u) => u.status === "error").length;
+  const inFlight = uploading + queued;
 
   const headerLabel =
-    uploading > 0
-      ? `Enviando ${uploading} arquivo(s)`
+    inFlight > 0
+      ? queued > 0
+        ? `Enviando ${uploading} · ${queued} na fila`
+        : `Enviando ${uploading} arquivo(s)`
       : failed > 0
         ? `${done} concluído(s), ${failed} com erro`
         : `${done} arquivo(s) enviado(s)`;
@@ -35,7 +39,7 @@ export function UploadProgressWidget() {
           </button>
           <button
             onClick={clearCompleted}
-            disabled={uploading > 0}
+            disabled={inFlight > 0}
             title="Fechar"
             className="rounded p-1 text-neutral-500 hover:bg-neutral-200 disabled:opacity-30 dark:hover:bg-neutral-700"
           >
@@ -47,9 +51,13 @@ export function UploadProgressWidget() {
       {!collapsed && (
         <div className="max-h-72 overflow-y-auto">
           {uploads.map((u) => (
-            <div key={u.id} className="flex items-center gap-3 border-b border-neutral-100 px-4 py-2.5 last:border-b-0 dark:border-neutral-800">
+            <div
+              key={u.id}
+              className="flex items-center gap-3 border-b border-neutral-100 px-4 py-2.5 last:border-b-0 dark:border-neutral-800"
+            >
               <div className="shrink-0">
                 {u.status === "uploading" && <Loader2 size={18} className="animate-spin text-blue-500" />}
+                {u.status === "queued" && <Clock size={18} className="text-neutral-400" />}
                 {u.status === "done" && <CheckCircle2 size={18} className="text-green-600" />}
                 {u.status === "error" && <XCircle size={18} className="text-red-600" />}
               </div>
@@ -61,10 +69,14 @@ export function UploadProgressWidget() {
                     <div className="h-full bg-blue-500 transition-all" style={{ width: `${u.progress}%` }} />
                   </div>
                 )}
+                {u.status === "queued" && <div className="text-xs text-neutral-500">Na fila</div>}
                 {u.status === "error" && <div className="text-xs text-red-600">{u.errorMessage}</div>}
               </div>
               {u.status !== "uploading" && (
-                <button onClick={() => dismiss(u.id)} className="shrink-0 rounded p-1 text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700">
+                <button
+                  onClick={() => dismiss(u.id)}
+                  className="shrink-0 rounded p-1 text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700"
+                >
                   <X size={14} />
                 </button>
               )}

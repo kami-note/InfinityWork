@@ -25,5 +25,14 @@ export async function POST(request: Request) {
   });
 
   const body = await res.text();
+
+  // Force garbage collection in the next event loop tick if enabled
+  // to prevent RAM from staying high after large formData parsing
+  if (global.gc) {
+    setTimeout(() => {
+      global.gc?.();
+    }, 0);
+  }
+
   return new NextResponse(body, { status: res.status, headers: { "Content-Type": "application/json" } });
 }

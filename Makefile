@@ -9,6 +9,7 @@ dev:
 	FILE_MANAGER_SERVICE_URL=http://localhost:4002 \
 	DOCS_SERVICE_URL=http://localhost:4003 \
 	JWT_SECRET=$$(grep '^JWT_SECRET=' .env | cut -d= -f2-) \
+	NODE_OPTIONS="--expose-gc" \
 	npm run dev -w apps/portal
 
 # Stops the dev containers AND whatever is still bound to :3000 — Ctrl+C on

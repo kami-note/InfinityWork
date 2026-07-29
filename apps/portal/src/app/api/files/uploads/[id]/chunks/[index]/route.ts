@@ -37,6 +37,15 @@ export async function PUT(request: Request, ctx: Ctx) {
 
   if (res.status === 204) return new NextResponse(null, { status: 204 });
   const text = await res.text();
+
+  // Force garbage collection in the next event loop tick if enabled
+  // to prevent RAM from staying high after streaming large chunks
+  if (global.gc) {
+    setTimeout(() => {
+      global.gc?.();
+    }, 0);
+  }
+
   return new NextResponse(text, {
     status: res.status,
     headers: { "Content-Type": "application/json" },
