@@ -6,7 +6,7 @@ import { StorageUsage } from "./StorageUsage";
 
 export function Sidebar({ parentId = null }: { parentId?: string | null }) {
   return (
-    <aside className="flex w-60 shrink-0 flex-col justify-between border-r border-neutral-200 p-4 dark:border-neutral-800">
+    <aside className="flex h-full w-full flex-col justify-between border-r border-neutral-200 p-4 dark:border-neutral-800">
       <div>
         <div className="mb-6 text-lg font-semibold">InfinityWork</div>
         <div className="mb-4">

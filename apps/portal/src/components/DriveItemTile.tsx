@@ -4,6 +4,7 @@ import { useState } from "react";
 import { MoreVertical, Check } from "lucide-react";
 import { DOCUMENT_MIME_TYPE } from "@infinitywork/shared";
 import { FileTypeIcon, FolderIcon } from "@/lib/file-icon";
+import { VideoThumbnail } from "./viewers/VideoThumbnail";
 import { formatSize } from "@/lib/format";
 
 export type DriveItem =
@@ -31,6 +32,7 @@ export function DriveItemTile({
 }) {
   const [dragOver, setDragOver] = useState(false);
   const isImage = item.kind === "file" && item.mimeType.startsWith("image/");
+  const isVideo = item.kind === "file" && item.mimeType.startsWith("video/");
   const isDocument = item.kind === "file" && item.mimeType === DOCUMENT_MIME_TYPE;
   const isDropTarget = item.kind === "folder";
 
@@ -92,6 +94,11 @@ export function DriveItemTile({
             src={`/api/files/${item.id}/download`}
             alt={item.name}
             loading="lazy"
+            className="h-16 w-16 rounded object-cover"
+          />
+        ) : isVideo ? (
+          <VideoThumbnail
+            src={`/api/files/${item.id}/download?disposition=inline`}
             className="h-16 w-16 rounded object-cover"
           />
         ) : (

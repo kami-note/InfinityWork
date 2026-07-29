@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { ArrowLeft, Download } from "lucide-react";
 import { requireAccessToken } from "@/lib/session";
-import { getFile } from "@/lib/file-manager-client";
+import { getFile, listFolder } from "@/lib/file-manager-client";
 import { Topbar } from "@/components/Topbar";
 import { FileViewer } from "@/components/FileViewer";
 
@@ -11,17 +11,22 @@ export default async function ViewPage({ params }: { params: Promise<{ fileId: s
   const token = await requireAccessToken();
   const file = await getFile(token, fileId);
 
+  const isVideo = file.mimeType.startsWith("video/");
+  const upNext = isVideo
+    ? (await listFolder(token, file.folderId)).files.filter((f) => f.id !== file.id && f.mimeType.startsWith("video/"))
+    : [];
+
   return (
     <div className="min-h-screen">
       <Suspense>
         <Topbar />
       </Suspense>
-      <div className="space-y-4 p-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
+      <div className="space-y-4 p-4 sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-3">
             <Link
               href={file.folderId ? `/drive?folderId=${file.folderId}` : "/drive"}
-              className="flex items-center gap-1.5 text-sm text-neutral-600 hover:underline dark:text-neutral-400"
+              className="flex shrink-0 items-center gap-1.5 text-sm text-neutral-600 hover:underline dark:text-neutral-400"
             >
               <ArrowLeft size={16} />
               Voltar
@@ -37,7 +42,7 @@ export default async function ViewPage({ params }: { params: Promise<{ fileId: s
           </a>
         </div>
 
-        <FileViewer file={file} />
+        <FileViewer file={file} upNext={upNext} />
       </div>
     </div>
   );

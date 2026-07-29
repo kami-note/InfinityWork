@@ -3,6 +3,7 @@ import { requireAccessToken } from "@/lib/session";
 import { listFolder, searchFiles } from "@/lib/file-manager-client";
 import { Sidebar } from "@/components/Sidebar";
 import { Topbar } from "@/components/Topbar";
+import { DriveShell } from "@/components/DriveShell";
 import { Breadcrumb } from "@/components/Breadcrumb";
 import { UploadDropzone } from "@/components/UploadDropzone";
 import { DriveGrid } from "@/components/DriveGrid";
@@ -20,20 +21,21 @@ export default async function DrivePage({
     const results = await searchFiles(token, q);
     const items: DriveItem[] = results.map((file) => ({ kind: "file", ...file }));
     return (
-      <div className="flex min-h-screen">
-        <Sidebar />
-        <main className="flex-1">
+      <DriveShell
+        sidebar={<Sidebar />}
+        topbar={
           <Suspense>
             <Topbar />
           </Suspense>
-          <div className="space-y-4 p-6">
-            <h2 className="text-sm text-neutral-600 dark:text-neutral-400">
-              Resultados para &quot;{q}&quot;
-            </h2>
-            <DriveGrid items={items} emptyLabel="Nenhum arquivo encontrado." />
-          </div>
-        </main>
-      </div>
+        }
+      >
+        <div className="space-y-4 p-4 sm:p-6">
+          <h2 className="text-sm text-neutral-600 dark:text-neutral-400">
+            Resultados para &quot;{q}&quot;
+          </h2>
+          <DriveGrid items={items} emptyLabel="Nenhum arquivo encontrado." />
+        </div>
+      </DriveShell>
     );
   }
 
@@ -44,20 +46,21 @@ export default async function DrivePage({
   ];
 
   return (
-    <div className="flex min-h-screen">
-      <Sidebar parentId={folderId ?? null} />
-      <main className="flex-1">
+    <DriveShell
+      sidebar={<Sidebar parentId={folderId ?? null} />}
+      topbar={
         <Suspense>
           <Topbar />
         </Suspense>
-        <div className="space-y-4 p-6">
-          <Breadcrumb trail={contents.breadcrumb} />
+      }
+    >
+      <div className="space-y-4 p-4 sm:p-6">
+        <Breadcrumb trail={contents.breadcrumb} />
 
-          <UploadDropzone folderId={folderId ?? null} />
+        <UploadDropzone folderId={folderId ?? null} />
 
-          <DriveGrid items={items} emptyLabel="Esta pasta está vazia." folderId={folderId ?? null} />
-        </div>
-      </main>
-    </div>
+        <DriveGrid items={items} emptyLabel="Esta pasta está vazia." folderId={folderId ?? null} />
+      </div>
+    </DriveShell>
   );
 }

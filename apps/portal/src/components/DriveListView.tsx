@@ -4,11 +4,14 @@ import { useState } from "react";
 import { ArrowUp, ArrowDown, MoreVertical } from "lucide-react";
 import { DOCUMENT_MIME_TYPE } from "@infinitywork/shared";
 import { FileTypeIcon, FolderIcon } from "@/lib/file-icon";
+import { VideoThumbnail } from "./viewers/VideoThumbnail";
 import { formatSize, formatDate } from "@/lib/format";
 import type { DriveItem } from "./DriveItemTile";
 
 export type SortKey = "name" | "updatedAt" | "size";
 export type SortDirection = "asc" | "desc";
+
+const ROW_GRID = "grid-cols-[auto_1fr_40px] sm:grid-cols-[auto_1fr_110px_40px] md:grid-cols-[auto_1fr_140px_110px_40px]";
 
 function SortableHeader({
   label,
@@ -66,17 +69,32 @@ export function DriveListView({
 
   return (
     <div className="overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-800">
-      <div className="grid grid-cols-[auto_1fr_140px_110px_40px] items-center gap-3 border-b border-neutral-200 bg-neutral-50 px-3 py-2 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className={`grid items-center gap-3 border-b border-neutral-200 bg-neutral-50 px-3 py-2 dark:border-neutral-800 dark:bg-neutral-900 ${ROW_GRID}`}>
         <span className="w-5" />
         <SortableHeader label="Nome" sortKey="name" currentSort={sortKey} currentDirection={sortDirection} onSort={onSort} />
-        <SortableHeader label="Modificado" sortKey="updatedAt" currentSort={sortKey} currentDirection={sortDirection} onSort={onSort} />
-        <SortableHeader label="Tamanho" sortKey="size" currentSort={sortKey} currentDirection={sortDirection} onSort={onSort} />
+        <SortableHeader
+          label="Modificado"
+          sortKey="updatedAt"
+          currentSort={sortKey}
+          currentDirection={sortDirection}
+          onSort={onSort}
+          className="hidden md:flex"
+        />
+        <SortableHeader
+          label="Tamanho"
+          sortKey="size"
+          currentSort={sortKey}
+          currentDirection={sortDirection}
+          onSort={onSort}
+          className="hidden sm:flex"
+        />
         <span />
       </div>
 
       {items.map((item) => {
         const isSelected = selected.has(item.id);
         const isImage = item.kind === "file" && item.mimeType.startsWith("image/");
+        const isVideo = item.kind === "file" && item.mimeType.startsWith("video/");
         const isDocument = item.kind === "file" && item.mimeType === DOCUMENT_MIME_TYPE;
         const isDropTarget = item.kind === "folder";
 
@@ -106,7 +124,7 @@ export function DriveListView({
               e.preventDefault();
               onMenu(e.clientX, e.clientY, item);
             }}
-            className={`group grid cursor-pointer grid-cols-[auto_1fr_140px_110px_40px] items-center gap-3 border-b border-neutral-100 px-3 py-2 text-sm last:border-b-0 dark:border-neutral-900 ${
+            className={`group grid cursor-pointer items-center gap-3 border-b border-neutral-100 px-3 py-2 text-sm last:border-b-0 dark:border-neutral-900 ${ROW_GRID} ${
               cutIds.has(item.id) ? "opacity-40" : ""
             } ${
               dragOverId === item.id
@@ -137,14 +155,16 @@ export function DriveListView({
               ) : isImage ? (
                 // eslint-disable-next-line @next/next/no-img-element -- proxied through our own auth route
                 <img src={`/api/files/${item.id}/download`} alt="" loading="lazy" className="h-5 w-5 rounded object-cover" />
+              ) : isVideo ? (
+                <VideoThumbnail src={`/api/files/${item.id}/download?disposition=inline`} className="h-5 w-5 rounded object-cover" />
               ) : (
                 <FileTypeIcon mimeType={item.mimeType} size={20} />
               )}
               <span className="truncate">{item.name}</span>
             </div>
 
-            <span className="text-xs text-neutral-500">{formatDate(item.updatedAt)}</span>
-            <span className="text-xs text-neutral-500">
+            <span className="hidden text-xs text-neutral-500 md:block">{formatDate(item.updatedAt)}</span>
+            <span className="hidden text-xs text-neutral-500 sm:block">
               {item.kind === "file" && !isDocument ? formatSize(item.size) : "—"}
             </span>
 

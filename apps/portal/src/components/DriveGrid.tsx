@@ -279,13 +279,13 @@ export function DriveGrid({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <FilterChip label="Tipo" value={typeFilter} options={TYPE_OPTIONS} onChange={setTypeFilter} />
           <FilterChip label="Modificado" value={modifiedFilter} options={MODIFIED_OPTIONS} onChange={setModifiedFilter} />
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {clipboard && clipboard.items.length > 0 && (
             <button
               onClick={() => void paste(folderId)}

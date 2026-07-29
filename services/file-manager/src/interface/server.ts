@@ -183,6 +183,19 @@ app.get(
     reply.header("Content-Disposition", `${dispositionType}; filename="${encodeURIComponent(file.name)}"`);
     reply.header("Accept-Ranges", "bytes");
 
+    // Content at a given file id only changes via docs' content-update
+    // endpoint (which bumps updatedAt), so it's a valid cache/ETag key.
+    // Without this, every video/image preview (thumbnail generation
+    // included — see VideoThumbnail.tsx) re-fetches the same bytes on
+    // every render instead of hitting the browser's HTTP cache.
+    const etag = `"${file.id}-${new Date(file.updatedAt).getTime()}"`;
+    reply.header("ETag", etag);
+    reply.header("Cache-Control", "private, max-age=3600, must-revalidate");
+    if (request.headers["if-none-match"] === etag) {
+      reply.code(304);
+      return reply.send();
+    }
+
     const totalSize = Number(file.size);
     const rangeHeader = request.headers.range;
     // Range requests are what let <video>/<audio> seek and progressively

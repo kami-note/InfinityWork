@@ -1,9 +1,17 @@
 import { FileQuestion, Download } from "lucide-react";
 import { TextViewer } from "./viewers/TextViewer";
 import { DocxViewer } from "./viewers/DocxViewer";
+import { VideoTheaterLayout } from "./VideoTheaterLayout";
 import { DOCX_MIME_TYPE, isTextLike } from "@/lib/viewer-types";
+import type { FileDto } from "@/lib/file-manager-client";
 
-export function FileViewer({ file }: { file: { id: string; name: string; mimeType: string } }) {
+export function FileViewer({
+  file,
+  upNext = [],
+}: {
+  file: { id: string; name: string; mimeType: string };
+  upNext?: FileDto[];
+}) {
   const downloadUrl = `/api/files/${file.id}/download`;
   // Content-Disposition: attachment (the default) forces a download dialog
   // instead of rendering — every embed below needs the inline variant.
@@ -19,7 +27,7 @@ export function FileViewer({ file }: { file: { id: string; name: string; mimeTyp
   }
 
   if (file.mimeType.startsWith("video/")) {
-    return <video controls src={inlineUrl} className="mx-auto max-h-[80vh] rounded" />;
+    return <VideoTheaterLayout url={inlineUrl} name={file.name} upNext={upNext} />;
   }
 
   if (file.mimeType.startsWith("audio/")) {
