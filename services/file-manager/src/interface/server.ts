@@ -7,10 +7,12 @@ import * as folderService from "../application/folder-service.js";
 import * as fileService from "../application/file-service.js";
 import { copyFolder } from "../application/copy-service.js";
 import { requireFileRole, ForbiddenResourceError } from "../application/access-control.js";
+import { ChunkedUploadError, ChunkedUploadService } from "../application/chunked-upload-service.js";
 
 const STORAGE_ROOT = process.env.STORAGE_ROOT ?? "/data/storage";
 const MAX_UPLOAD_BYTES = Number(process.env.STORAGE_MAX_UPLOAD_BYTES ?? 500 * 1024 * 1024);
 const storage = new LocalStorageProvider(STORAGE_ROOT, MAX_UPLOAD_BYTES);
+const chunkedUploads = new ChunkedUploadService(STORAGE_ROOT, storage, { maxUploadBytes: MAX_UPLOAD_BYTES });
 
 // Prisma maps the `size BigInt` column to a JS bigint, which JSON.stringify
 // can't serialize natively. Every response that includes a File would
@@ -28,6 +30,11 @@ const app = Fastify({ logger: true, bodyLimit: MAX_UPLOAD_BYTES });
 await app.register(cors, { origin: process.env.PORTAL_ORIGIN ?? "http://portal:3000" });
 await app.register(multipart, { limits: { fileSize: MAX_UPLOAD_BYTES } });
 await app.register(createAuthPlugin(process.env.JWT_SECRET!));
+
+// Chunk PUTs send raw bytes — pass the stream through instead of buffering.
+app.addContentTypeParser("application/octet-stream", (_request, payload, done) => {
+  done(null, payload);
+});
 
 app.get("/health", async () => ({ status: "ok" }));
 
@@ -112,6 +119,124 @@ app.post(
       // behind a misleading error the first time this code shipped.
       request.log.error(err);
       return reply.code(500).send({ error: "upload_failed" });
+    }
+  },
+);
+
+function sendChunkedError(reply: import("fastify").FastifyReply, err: unknown) {
+  if (err instanceof ChunkedUploadError) {
+    return reply.code(err.httpStatus).send({ error: err.code, message: err.message });
+  }
+  throw err;
+}
+
+app.post(
+  "/uploads",
+  { preHandler: app.requirePermission(PERMISSIONS.files.file.upload) },
+  async (request, reply) => {
+    const body = request.body as {
+      name?: string;
+      mimeType?: string;
+      folderId?: string | null;
+      size?: number;
+    };
+    try {
+      return await chunkedUploads.createSession({
+        ownerId: request.user!.sub,
+        name: body.name ?? "",
+        mimeType: body.mimeType ?? "application/octet-stream",
+        folderId: body.folderId ?? null,
+        size: Number(body.size),
+      });
+    } catch (err) {
+      return sendChunkedError(reply, err);
+    }
+  },
+);
+
+app.get(
+  "/uploads/:id",
+  { preHandler: app.requirePermission(PERMISSIONS.files.file.upload) },
+  async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      const { meta, receivedIndexes } = await chunkedUploads.listReceivedParts(id, request.user!.sub);
+      return {
+        uploadId: id,
+        status: meta.status,
+        name: meta.name,
+        size: meta.size,
+        totalChunks: meta.totalChunks,
+        chunkSize: meta.chunkSize,
+        folderId: meta.folderId,
+        receivedIndexes,
+      };
+    } catch (err) {
+      return sendChunkedError(reply, err);
+    }
+  },
+);
+
+app.put(
+  "/uploads/:id/chunks/:index",
+  { preHandler: app.requirePermission(PERMISSIONS.files.file.upload) },
+  async (request, reply) => {
+    const { id, index: indexRaw } = request.params as { id: string; index: string };
+    const index = Number(indexRaw);
+    const contentLengthHeader = request.headers["content-length"];
+    const contentLength = contentLengthHeader != null ? Number(contentLengthHeader) : null;
+    try {
+      await chunkedUploads.putChunk(
+        id,
+        request.user!.sub,
+        index,
+        contentLength,
+        request.body as import("node:stream").Readable,
+      );
+      return reply.code(204).send();
+    } catch (err) {
+      return sendChunkedError(reply, err);
+    }
+  },
+);
+
+app.post(
+  "/uploads/:id/complete",
+  { preHandler: app.requirePermission(PERMISSIONS.files.file.upload) },
+  async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      const result = await chunkedUploads.requestComplete(id, request.user!.sub);
+      return reply.code(202).send(result);
+    } catch (err) {
+      return sendChunkedError(reply, err);
+    }
+  },
+);
+
+app.get(
+  "/uploads/:id/status",
+  { preHandler: app.requirePermission(PERMISSIONS.files.file.upload) },
+  async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      return await chunkedUploads.getStatus(id, request.user!.sub);
+    } catch (err) {
+      return sendChunkedError(reply, err);
+    }
+  },
+);
+
+app.delete(
+  "/uploads/:id",
+  { preHandler: app.requirePermission(PERMISSIONS.files.file.upload) },
+  async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      await chunkedUploads.deleteSession(id, request.user!.sub);
+      return reply.code(204).send();
+    } catch (err) {
+      return sendChunkedError(reply, err);
     }
   },
 );
@@ -345,6 +470,7 @@ app.get("/storage/usage", { preHandler: app.requireAuth }, async (request) => {
 });
 
 const port = Number(process.env.PORT ?? 4002);
+chunkedUploads.startCleanupScheduler(app.log);
 app.listen({ port, host: "0.0.0.0" }).catch((err) => {
   app.log.error(err);
   process.exit(1);
