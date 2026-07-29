@@ -99,6 +99,10 @@ services:
       FILE_MANAGER_SERVICE_URL: ${FILE_MANAGER_SERVICE_URL}
       DOCS_SERVICE_URL: ${DOCS_SERVICE_URL}
       NODE_ENV: production
+      # Next standalone defaults to listening on 127.0.0.1 — that makes the
+      # published host port reset connections. Bind all interfaces instead.
+      HOSTNAME: "0.0.0.0"
+      PORT: "3000"
     ports:
       - "${PORTAL_PORT}:3000"
     networks: [internal, public]
