@@ -9,6 +9,8 @@ build/
 *.log
 .env
 .env.local
+.env.production
+.env.prod
 data/postgres/
 data/storage/
 .DS_Store

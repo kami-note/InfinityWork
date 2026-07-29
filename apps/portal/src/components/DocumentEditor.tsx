@@ -20,7 +20,7 @@ import TableHeader from "@tiptap/extension-table-header";
 import TableCell from "@tiptap/extension-table-cell";
 import { FontSize } from "@/lib/tiptap-font-size";
 import { PageBreak } from "@/lib/tiptap-page-break";
-import { createPaginationExtension, type PageHeightRef } from "@/lib/tiptap-pagination";
+import { createPaginationExtension, type PageMetricsRef } from "@/lib/tiptap-pagination";
 import { MARGIN_PRESETS, unwrapSavedContent, type MarginPreset } from "@/lib/document-format";
 import { DocumentToolbar } from "./DocumentToolbar";
 import { renameFileAction } from "@/lib/actions";
@@ -30,6 +30,16 @@ type SaveStatus = "saved" | "saving" | "error";
 // 1056px ≈ 11in @96dpi — the visible page height everything else (margins,
 // auto-pagination) measures against.
 const PAGE_HEIGHT = 1056;
+// Gap between stacked page sheets — must match --page-gap in globals.css.
+const PAGE_GAP = 32;
+
+function metricsForMargin(margin: MarginPreset): Pick<PageMetricsRef, "contentHeight" | "breakHeight"> {
+  const m = MARGIN_PRESETS[margin];
+  return {
+    contentHeight: PAGE_HEIGHT - 2 * m,
+    breakHeight: PAGE_GAP + 2 * m,
+  };
+}
 
 const BASE_EXTENSIONS = [
   // Levels 1-5 back the style dropdown's Título/Subtítulo/Título 1-3 —
@@ -74,11 +84,11 @@ export function DocumentEditor({
   const titleTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // A plain mutable box, not React state: the pagination plugin (created
-  // once, below) reads `.current` on every recompute, so changing margin
-  // just needs to update this value — no editor/extension recreation.
-  const pageHeightRef = useRef<PageHeightRef>({ current: PAGE_HEIGHT - 2 * MARGIN_PRESETS[initialMargin] }).current;
+  // once, below) reads these fields on every recompute, so changing margin
+  // just needs to update the values — no editor/extension recreation.
+  const pageMetricsRef = useRef<PageMetricsRef>(metricsForMargin(initialMargin)).current;
 
-  const extensions = useMemo(() => [...BASE_EXTENSIONS, createPaginationExtension(pageHeightRef)], [pageHeightRef]);
+  const extensions = useMemo(() => [...BASE_EXTENSIONS, createPaginationExtension(pageMetricsRef)], [pageMetricsRef]);
 
   const editor = useEditor({
     extensions,
@@ -111,7 +121,7 @@ export function DocumentEditor({
   function handleMarginChange(next: MarginPreset) {
     setMargin(next);
     marginRef.current = next;
-    pageHeightRef.current = PAGE_HEIGHT - 2 * MARGIN_PRESETS[next];
+    Object.assign(pageMetricsRef, metricsForMargin(next));
     if (editor) void save(editor.getJSON(), next);
   }
 
@@ -204,6 +214,7 @@ export function DocumentEditor({
               padding: MARGIN_PRESETS[margin],
               minHeight: PAGE_HEIGHT,
               "--page-margin": `${MARGIN_PRESETS[margin]}px`,
+              "--page-gap": `${PAGE_GAP}px`,
             } as React.CSSProperties
           }
           className="mx-auto w-[816px] max-w-full cursor-text bg-white text-black shadow dark:shadow-none"
