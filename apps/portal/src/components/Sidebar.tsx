@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { HardDrive, Trash2 } from "lucide-react";
+import { HardDrive, Trash2, Users } from "lucide-react";
 import { NewButton } from "./NewButton";
 import { StorageUsage } from "./StorageUsage";
 
@@ -19,6 +19,13 @@ export function Sidebar({ parentId = null }: { parentId?: string | null }) {
           >
             <HardDrive size={18} />
             Meus arquivos
+          </Link>
+          <Link
+            href="/drive/shared"
+            className="flex items-center gap-3 rounded-full px-4 py-2 hover:bg-neutral-100 dark:hover:bg-neutral-900"
+          >
+            <Users size={18} />
+            Compartilhados comigo
           </Link>
           <Link
             href="/trash"

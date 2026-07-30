@@ -85,8 +85,58 @@ export async function copyItemsAction(items: { id: string; kind: "folder" | "fil
   revalidatePath("/drive");
 }
 
-export async function shareFileAction(id: string, userId: string, role: "owner" | "editor" | "viewer") {
+export async function shareByEmailAction(
+  kind: "file" | "folder",
+  id: string,
+  email: string,
+  role: "viewer" | "editor",
+) {
+  const token = await requireAccessToken();
+  const { searchUserByEmail } = await import("./auth-client");
+  const user = await searchUserByEmail(token, email);
+  if (!user) throw new Error("Usuário não encontrado com este e-mail.");
+  if (kind === "file") await fm.shareFile(token, id, user.id, role);
+  else await fm.shareFolder(token, id, user.id, role);
+  revalidatePath("/drive");
+  revalidatePath("/drive/shared");
+}
+
+export async function unshareAction(kind: "file" | "folder", id: string, userId: string) {
+  const token = await requireAccessToken();
+  if (kind === "file") await fm.unshareFile(token, id, userId);
+  else await fm.unshareFolder(token, id, userId);
+  revalidatePath("/drive");
+  revalidatePath("/drive/shared");
+}
+
+export async function listPermissionsAction(kind: "file" | "folder", id: string) {
+  const token = await requireAccessToken();
+  return kind === "file" ? fm.listFilePermissions(token, id) : fm.listFolderPermissions(token, id);
+}
+
+export async function createShareLinkAction(kind: "file" | "folder", id: string, expiresAt?: string | null) {
+  const token = await requireAccessToken();
+  return kind === "file"
+    ? fm.createFileShareLink(token, id, expiresAt)
+    : fm.createFolderShareLink(token, id, expiresAt);
+}
+
+export async function listShareLinksAction(kind: "file" | "folder", id: string) {
+  const token = await requireAccessToken();
+  return kind === "file" ? fm.listFileShareLinks(token, id) : fm.listFolderShareLinks(token, id);
+}
+
+export async function revokeShareLinkAction(kind: "file" | "folder", id: string, linkId: string) {
+  const token = await requireAccessToken();
+  if (kind === "file") await fm.revokeFileShareLink(token, id, linkId);
+  else await fm.revokeFolderShareLink(token, id, linkId);
+}
+
+export type ShareTargetKind = "file" | "folder";
+
+export async function shareFileAction(id: string, userId: string, role: "viewer" | "editor") {
   const token = await requireAccessToken();
   await fm.shareFile(token, id, userId, role);
   revalidatePath("/drive");
+  revalidatePath("/drive/shared");
 }

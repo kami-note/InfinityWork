@@ -1,6 +1,6 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
-import { verifyAccessToken } from "@infinitywork/shared";
+import { verifyAccessToken, hasPermission, PERMISSIONS } from "@infinitywork/shared";
 import { loginSchema, refreshSchema } from "./schemas.js";
 import {
   login,
@@ -9,15 +9,16 @@ import {
   InvalidCredentialsError,
   InvalidRefreshTokenError,
 } from "../application/auth-service.js";
-import { findUserWithPermissionsById } from "../infrastructure/user-repository.js";
+import {
+  findUserWithPermissionsById,
+  findUserPublicByEmail,
+} from "../infrastructure/user-repository.js";
 
 const JWT_SECRET = process.env.JWT_SECRET!;
 if (!JWT_SECRET) throw new Error("JWT_SECRET is required");
 
 const app = Fastify({ logger: true });
 
-// Only the portal calls this service, and only over the internal Docker
-// network — CORS is kept tight to that origin, not opened to "*".
 await app.register(cors, { origin: process.env.PORTAL_ORIGIN ?? "http://portal:3000" });
 
 app.get("/health", async () => ({ status: "ok" }));
@@ -73,6 +74,25 @@ app.get("/me", async (request, reply) => {
     const claims = await verifyAccessToken(authHeader.slice("Bearer ".length), JWT_SECRET);
     const user = await findUserWithPermissionsById(claims.sub);
     if (!user) return reply.code(401).send({ error: "unauthorized" });
+    return user;
+  } catch {
+    return reply.code(401).send({ error: "unauthorized" });
+  }
+});
+
+app.get("/users/search", async (request, reply) => {
+  const authHeader = request.headers.authorization;
+  if (!authHeader?.startsWith("Bearer ")) return reply.code(401).send({ error: "unauthorized" });
+
+  try {
+    const claims = await verifyAccessToken(authHeader.slice("Bearer ".length), JWT_SECRET);
+    if (!hasPermission(claims.permissions, PERMISSIONS.users.user.lookup)) {
+      return reply.code(403).send({ error: "forbidden", required: PERMISSIONS.users.user.lookup });
+    }
+    const email = (request.query as { email?: string }).email?.trim();
+    if (!email) return reply.code(400).send({ error: "email_required" });
+    const user = await findUserPublicByEmail(email);
+    if (!user) return reply.code(404).send({ error: "not_found" });
     return user;
   } catch {
     return reply.code(401).send({ error: "unauthorized" });

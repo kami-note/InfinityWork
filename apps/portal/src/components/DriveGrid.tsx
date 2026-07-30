@@ -17,6 +17,7 @@ import {
   moveItemsAction,
   copyItemsAction,
 } from "@/lib/actions";
+import { ShareDialog } from "./ShareDialog";
 
 type TypeFilter = "all" | "folder" | "document" | "image" | "other";
 type ModifiedFilter = "all" | "today" | "week" | "month" | "year";
@@ -78,6 +79,7 @@ export function DriveGrid({
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [menu, setMenu] = useState<{ position: ContextMenuState; item: DriveItem } | null>(null);
+  const [shareTarget, setShareTarget] = useState<DriveItem | null>(null);
   const [clipboard, setClipboard] = useState<{ items: ItemRef[]; mode: "copy" | "cut" } | null>(null);
   const [marqueeRect, setMarqueeRect] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
 
@@ -388,11 +390,24 @@ export function DriveGrid({
                   },
                 ]
               : []),
+            {
+              label: "Compartilhar",
+              onSelect: () => setShareTarget(menu.item),
+            },
             { label: "Copiar", onSelect: () => setClipboard({ items: [{ id: menu.item.id, kind: menu.item.kind }], mode: "copy" }) },
             { label: "Recortar", onSelect: () => setClipboard({ items: [{ id: menu.item.id, kind: menu.item.kind }], mode: "cut" }) },
             { label: "Renomear", onSelect: () => handleRename(menu.item) },
             { label: "Excluir", danger: true, onSelect: () => handleDelete(menu.item) },
           ]}
+        />
+      )}
+
+      {shareTarget && (
+        <ShareDialog
+          kind={shareTarget.kind}
+          id={shareTarget.id}
+          name={shareTarget.name}
+          onClose={() => setShareTarget(null)}
         />
       )}
     </div>

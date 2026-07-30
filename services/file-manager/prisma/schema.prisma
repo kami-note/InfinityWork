@@ -16,17 +16,23 @@ enum FilePermissionRole {
   viewer
 }
 
+enum ShareLinkTargetType {
+  file
+  folder
+}
+
 model Folder {
-  id        String    @id @default(uuid())
-  name      String
-  parentId  String?   @map("parent_id")
-  parent    Folder?   @relation("FolderTree", fields: [parentId], references: [id])
-  children  Folder[]  @relation("FolderTree")
-  ownerId   String    @map("owner_id")
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
-  files     File[]
+  id          String             @id @default(uuid())
+  name        String
+  parentId    String?            @map("parent_id")
+  parent      Folder?            @relation("FolderTree", fields: [parentId], references: [id])
+  children    Folder[]           @relation("FolderTree")
+  ownerId     String             @map("owner_id")
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+  deletedAt   DateTime?          @map("deleted_at")
+  files       File[]
+  permissions FolderPermission[]
 
   @@index([parentId])
   @@index([ownerId])
@@ -34,20 +40,19 @@ model Folder {
 }
 
 model File {
-  id             String    @id @default(uuid())
+  id             String           @id @default(uuid())
   name           String
-  folderId       String?   @map("folder_id")
-  folder         Folder?   @relation(fields: [folderId], references: [id])
-  ownerId        String    @map("owner_id")
-  storageKey     String    @map("storage_key")
+  folderId       String?          @map("folder_id")
+  folder         Folder?          @relation(fields: [folderId], references: [id])
+  ownerId        String           @map("owner_id")
+  storageKey     String           @map("storage_key")
   size           BigInt
-  mimeType       String    @map("mime_type")
-  checksumSha256 String    @map("checksum_sha256")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
-  deletedAt      DateTime? @map("deleted_at")
-
-  permissions FilePermission[]
+  mimeType       String           @map("mime_type")
+  checksumSha256 String           @map("checksum_sha256")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+  deletedAt      DateTime?        @map("deleted_at")
+  permissions    FilePermission[]
 
   @@index([folderId])
   @@index([ownerId])
@@ -61,5 +66,32 @@ model FilePermission {
   file   File               @relation(fields: [fileId], references: [id], onDelete: Cascade)
 
   @@id([fileId, userId])
+  @@index([userId])
   @@map("file_permissions")
+}
+
+model FolderPermission {
+  folderId String             @map("folder_id")
+  userId   String             @map("user_id")
+  role     FilePermissionRole
+  folder   Folder             @relation(fields: [folderId], references: [id], onDelete: Cascade)
+
+  @@id([folderId, userId])
+  @@index([userId])
+  @@map("folder_permissions")
+}
+
+model ShareLink {
+  id        String              @id @default(uuid())
+  tokenHash String              @unique @map("token_hash")
+  targetType ShareLinkTargetType @map("target_type")
+  targetId  String              @map("target_id")
+  role      FilePermissionRole  @default(viewer)
+  expiresAt DateTime?           @map("expires_at")
+  revokedAt DateTime?           @map("revoked_at")
+  createdBy String              @map("created_by")
+  createdAt DateTime            @default(now()) @map("created_at")
+
+  @@index([targetType, targetId])
+  @@map("share_links")
 }

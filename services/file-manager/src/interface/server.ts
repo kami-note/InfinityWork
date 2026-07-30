@@ -3,10 +3,21 @@ import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import { PERMISSIONS, createAuthPlugin } from "@infinitywork/shared";
 import { LocalStorageProvider, UploadTooLargeError } from "../infrastructure/local-storage-provider.js";
+import { prisma } from "../infrastructure/prisma.js";
 import * as folderService from "../application/folder-service.js";
 import * as fileService from "../application/file-service.js";
+import * as shareService from "../application/share-service.js";
 import { copyFolder } from "../application/copy-service.js";
-import { requireFileRole, ForbiddenResourceError } from "../application/access-control.js";
+import {
+  requireFileRole,
+  requireFolderRole,
+  assertResourceOwner,
+  getEffectiveFileRole,
+  isFileUnderFolder,
+  ForbiddenResourceError,
+  NotResourceOwnerError,
+  type ShareRole,
+} from "../application/access-control.js";
 import { ChunkedUploadError, ChunkedUploadService } from "../application/chunked-upload-service.js";
 
 const STORAGE_ROOT = process.env.STORAGE_ROOT ?? "/data/storage";
@@ -14,84 +25,281 @@ const MAX_UPLOAD_BYTES = Number(process.env.STORAGE_MAX_UPLOAD_BYTES ?? 500 * 10
 const storage = new LocalStorageProvider(STORAGE_ROOT, MAX_UPLOAD_BYTES);
 const chunkedUploads = new ChunkedUploadService(STORAGE_ROOT, storage, { maxUploadBytes: MAX_UPLOAD_BYTES });
 
-// Prisma maps the `size BigInt` column to a JS bigint, which JSON.stringify
-// can't serialize natively. Every response that includes a File would
-// otherwise 500 — this is the single place that needs to know about it.
 (BigInt.prototype as unknown as { toJSON(): string }).toJSON = function () {
   return this.toString();
 };
 
-// Fastify's own default bodyLimit is 1MB and applies to the raw request
-// regardless of @fastify/multipart's `limits.fileSize` — without this,
-// every upload above ~1MB was rejected before multipart even saw it,
-// no matter what STORAGE_MAX_UPLOAD_BYTES said.
 const app = Fastify({ logger: true, bodyLimit: MAX_UPLOAD_BYTES });
 
 await app.register(cors, { origin: process.env.PORTAL_ORIGIN ?? "http://portal:3000" });
 await app.register(multipart, { limits: { fileSize: MAX_UPLOAD_BYTES } });
 await app.register(createAuthPlugin(process.env.JWT_SECRET!));
 
-// Chunk PUTs send raw bytes — pass the stream through instead of buffering.
 app.addContentTypeParser("application/octet-stream", (_request, payload, done) => {
   done(null, payload);
 });
 
+function isShareRole(role: unknown): role is ShareRole {
+  return role === "viewer" || role === "editor";
+}
+
+async function sendAclError(reply: import("fastify").FastifyReply, err: unknown) {
+  if (err instanceof ForbiddenResourceError || err instanceof NotResourceOwnerError) {
+    return reply.code(403).send({ error: "forbidden" });
+  }
+  throw err;
+}
+
+async function streamFileDownload(
+  request: import("fastify").FastifyRequest,
+  reply: import("fastify").FastifyReply,
+  file: Awaited<ReturnType<typeof fileService.getFile>>,
+) {
+  const { disposition } = request.query as { disposition?: string };
+  const dispositionType = disposition === "inline" ? "inline" : "attachment";
+  reply.header("Content-Type", file.mimeType);
+  reply.header("Content-Disposition", `${dispositionType}; filename="${encodeURIComponent(file.name)}"`);
+  reply.header("Accept-Ranges", "bytes");
+
+  const etag = `"${file.id}-${new Date(file.updatedAt).getTime()}"`;
+  reply.header("ETag", etag);
+  reply.header("Cache-Control", "private, max-age=3600, must-revalidate");
+  if (request.headers["if-none-match"] === etag) {
+    reply.code(304);
+    return reply.send();
+  }
+
+  const totalSize = Number(file.size);
+  const rangeHeader = request.headers.range;
+  const match = rangeHeader ? /^bytes=(\d*)-(\d*)$/.exec(rangeHeader) : null;
+
+  if (match) {
+    const [, startStr, endStr] = match;
+    let start = startStr ? parseInt(startStr, 10) : undefined;
+    let end = endStr ? parseInt(endStr, 10) : undefined;
+
+    if (start === undefined && end !== undefined) {
+      start = Math.max(totalSize - end, 0);
+      end = totalSize - 1;
+    } else if (end === undefined) {
+      end = totalSize - 1;
+    }
+
+    if (start === undefined || start > end! || start >= totalSize) {
+      reply.code(416);
+      reply.header("Content-Range", `bytes */${totalSize}`);
+      return reply.send();
+    }
+
+    end = Math.min(end!, totalSize - 1);
+    reply.code(206);
+    reply.header("Content-Range", `bytes ${start}-${end}/${totalSize}`);
+    reply.header("Content-Length", end - start + 1);
+    return reply.send(storage.read(file.storageKey, { start, end }));
+  }
+
+  reply.header("Content-Length", totalSize);
+  return reply.send(storage.read(file.storageKey));
+}
+
 app.get("/health", async () => ({ status: "ok" }));
 
-app.get("/folders", { preHandler: app.requireAuth }, async (request) => {
+app.get("/folders", { preHandler: app.requireAuth }, async (request, reply) => {
   const parentId = (request.query as { parentId?: string }).parentId ?? null;
-  const [contents, trail] = await Promise.all([
-    folderService.listFolderContents(request.user!.sub, parentId),
-    folderService.breadcrumb(parentId),
-  ]);
-  return { ...contents, breadcrumb: trail };
+  try {
+    const [contents, trail] = await Promise.all([
+      folderService.listFolderContents(request.user!.sub, parentId),
+      folderService.breadcrumbForUser(parentId, request.user!.sub),
+    ]);
+    return { folders: contents.folders, files: contents.files, breadcrumb: trail, mode: contents.mode };
+  } catch (err) {
+    return sendAclError(reply, err);
+  }
 });
 
 app.post(
   "/folders",
   { preHandler: app.requirePermission(PERMISSIONS.files.folder.create) },
-  async (request) => {
+  async (request, reply) => {
     const body = request.body as { name: string; parentId?: string | null };
-    return folderService.createFolder(request.user!.sub, body.name, body.parentId ?? null);
+    const parentId = body.parentId ?? null;
+    try {
+      if (parentId) {
+        await requireFolderRole(parentId, request.user!.sub, "editor");
+      }
+      return folderService.createFolder(request.user!.sub, body.name, parentId);
+    } catch (err) {
+      return sendAclError(reply, err);
+    }
   },
 );
 
 app.patch(
   "/folders/:id",
   { preHandler: app.requirePermission(PERMISSIONS.files.folder.rename) },
-  async (request) => {
+  async (request, reply) => {
     const { id } = request.params as { id: string };
-    const { name } = request.body as { name: string };
-    return folderService.renameFolder(id, name);
+    try {
+      await requireFolderRole(id, request.user!.sub, "editor");
+      const { name } = request.body as { name: string };
+      return folderService.renameFolder(id, name);
+    } catch (err) {
+      return sendAclError(reply, err);
+    }
   },
 );
 
 app.patch(
   "/folders/:id/move",
   { preHandler: app.requirePermission(PERMISSIONS.files.folder.move) },
-  async (request) => {
+  async (request, reply) => {
     const { id } = request.params as { id: string };
     const { parentId } = request.body as { parentId: string | null };
-    return folderService.moveFolder(id, parentId);
+    try {
+      await requireFolderRole(id, request.user!.sub, "editor");
+      if (parentId) {
+        await requireFolderRole(parentId, request.user!.sub, "editor");
+      } else {
+        await assertResourceOwner("folder", id, request.user!.sub);
+      }
+      return folderService.moveFolder(id, parentId);
+    } catch (err) {
+      return sendAclError(reply, err);
+    }
   },
 );
 
 app.delete(
   "/folders/:id",
   { preHandler: app.requirePermission(PERMISSIONS.files.folder.delete) },
-  async (request) => {
+  async (request, reply) => {
     const { id } = request.params as { id: string };
-    return folderService.softDeleteFolder(id);
+    try {
+      await assertResourceOwner("folder", id, request.user!.sub);
+      return folderService.softDeleteFolder(id);
+    } catch (err) {
+      return sendAclError(reply, err);
+    }
   },
 );
 
 app.post(
   "/folders/:id/copy",
   { preHandler: app.requirePermission(PERMISSIONS.files.folder.create) },
-  async (request) => {
+  async (request, reply) => {
     const { id } = request.params as { id: string };
     const { targetParentId } = request.body as { targetParentId: string | null };
-    return copyFolder(storage, { id, ownerId: request.user!.sub, targetParentId, rename: true });
+    try {
+      await requireFolderRole(id, request.user!.sub, "viewer");
+      if (targetParentId) {
+        await requireFolderRole(targetParentId, request.user!.sub, "editor");
+      }
+      return copyFolder(storage, { id, ownerId: request.user!.sub, targetParentId, rename: true });
+    } catch (err) {
+      return sendAclError(reply, err);
+    }
+  },
+);
+
+app.post(
+  "/folders/:id/share",
+  { preHandler: app.requirePermission(PERMISSIONS.files.file.share) },
+  async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { userId, role } = request.body as { userId: string; role: string };
+    if (!isShareRole(role)) return reply.code(400).send({ error: "invalid_role" });
+    try {
+      await assertResourceOwner("folder", id, request.user!.sub);
+      return shareService.shareFolder(id, userId, role);
+    } catch (err) {
+      return sendAclError(reply, err);
+    }
+  },
+);
+
+app.delete(
+  "/folders/:id/share/:userId",
+  { preHandler: app.requirePermission(PERMISSIONS.files.file.share) },
+  async (request, reply) => {
+    const { id, userId } = request.params as { id: string; userId: string };
+    try {
+      await assertResourceOwner("folder", id, request.user!.sub);
+      await shareService.unshareFolder(id, userId);
+      return reply.code(204).send();
+    } catch (err) {
+      return sendAclError(reply, err);
+    }
+  },
+);
+
+app.get(
+  "/folders/:id/permissions",
+  { preHandler: app.requirePermission(PERMISSIONS.files.file.share) },
+  async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      await assertResourceOwner("folder", id, request.user!.sub);
+      return shareService.listFolderPermissions(id);
+    } catch (err) {
+      return sendAclError(reply, err);
+    }
+  },
+);
+
+app.post(
+  "/folders/:id/links",
+  { preHandler: app.requirePermission(PERMISSIONS.files.file.share) },
+  async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const body = (request.body as { expiresAt?: string | null } | undefined) ?? {};
+    try {
+      await assertResourceOwner("folder", id, request.user!.sub);
+      const expiresAt = body.expiresAt ? new Date(body.expiresAt) : null;
+      const { link, token } = await shareService.createShareLink({
+        targetType: "folder",
+        targetId: id,
+        createdBy: request.user!.sub,
+        expiresAt,
+      });
+      return { id: link.id, token, expiresAt: link.expiresAt, createdAt: link.createdAt };
+    } catch (err) {
+      return sendAclError(reply, err);
+    }
+  },
+);
+
+app.get(
+  "/folders/:id/links",
+  { preHandler: app.requirePermission(PERMISSIONS.files.file.share) },
+  async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      await assertResourceOwner("folder", id, request.user!.sub);
+      const links = await shareService.listShareLinks("folder", id);
+      return links.map((l) => ({
+        id: l.id,
+        expiresAt: l.expiresAt,
+        createdAt: l.createdAt,
+        revokedAt: l.revokedAt,
+      }));
+    } catch (err) {
+      return sendAclError(reply, err);
+    }
+  },
+);
+
+app.delete(
+  "/folders/:id/links/:linkId",
+  { preHandler: app.requirePermission(PERMISSIONS.files.file.share) },
+  async (request, reply) => {
+    const { id, linkId } = request.params as { id: string; linkId: string };
+    try {
+      await assertResourceOwner("folder", id, request.user!.sub);
+      await shareService.revokeShareLink(linkId, request.user!.sub);
+      return reply.code(204).send();
+    } catch (err) {
+      return sendAclError(reply, err);
+    }
   },
 );
 
@@ -104,6 +312,9 @@ app.post(
     const folderId = (data.fields.folderId as { value?: string } | undefined)?.value ?? null;
 
     try {
+      if (folderId) {
+        await requireFolderRole(folderId, request.user!.sub, "editor");
+      }
       const file = await fileService.uploadFile(storage, {
         ownerId: request.user!.sub,
         folderId,
@@ -113,10 +324,10 @@ app.post(
       });
       return file;
     } catch (err) {
+      if (err instanceof ForbiddenResourceError || err instanceof NotResourceOwnerError) {
+        return reply.code(403).send({ error: "forbidden" });
+      }
       if (err instanceof UploadTooLargeError) return reply.code(413).send({ error: "upload_too_large" });
-      // Surface the real cause instead of masking every failure as "too
-      // large" — that swallowed genuine bugs (disk errors, stream issues)
-      // behind a misleading error the first time this code shipped.
       request.log.error(err);
       return reply.code(500).send({ error: "upload_failed" });
     } finally {
@@ -147,14 +358,19 @@ app.post(
       size?: number;
     };
     try {
+      const folderId = body.folderId ?? null;
+      if (folderId) {
+        await requireFolderRole(folderId, request.user!.sub, "editor");
+      }
       return await chunkedUploads.createSession({
         ownerId: request.user!.sub,
         name: body.name ?? "",
         mimeType: body.mimeType ?? "application/octet-stream",
-        folderId: body.folderId ?? null,
+        folderId,
         size: Number(body.size),
       });
     } catch (err) {
+      if (err instanceof ForbiddenResourceError) return reply.code(403).send({ error: "forbidden" });
       return sendChunkedError(reply, err);
     }
   },
@@ -261,8 +477,7 @@ app.put(
     try {
       await requireFileRole(id, request.user!.sub, "editor");
     } catch (err) {
-      if (err instanceof ForbiddenResourceError) return reply.code(403).send({ error: "forbidden" });
-      throw err;
+      return sendAclError(reply, err);
     }
     const data = await request.file();
     if (!data) return reply.code(400).send({ error: "no_file" });
@@ -289,11 +504,12 @@ app.get(
     const { id } = request.params as { id: string };
     try {
       await requireFileRole(id, request.user!.sub, "viewer");
+      const file = await fileService.getFile(id);
+      const role = await getEffectiveFileRole(id, request.user!.sub);
+      return { ...file, role };
     } catch (err) {
-      if (err instanceof ForbiddenResourceError) return reply.code(403).send({ error: "forbidden" });
-      throw err;
+      return sendAclError(reply, err);
     }
-    return fileService.getFile(id);
   },
 );
 
@@ -305,70 +521,10 @@ app.get(
     try {
       await requireFileRole(id, request.user!.sub, "viewer");
     } catch (err) {
-      if (err instanceof ForbiddenResourceError) return reply.code(403).send({ error: "forbidden" });
-      throw err;
+      return sendAclError(reply, err);
     }
     const file = await fileService.getFile(id);
-    // "inline" lets the browser render the bytes in place (used by the
-    // in-app viewer for PDFs/images/video/audio) — plain navigation or an
-    // <iframe> honors Content-Disposition, so "attachment" would force a
-    // download dialog instead of showing the PDF. The explicit "Baixar"
-    // links still get the default (attachment) behavior.
-    const { disposition } = request.query as { disposition?: string };
-    const dispositionType = disposition === "inline" ? "inline" : "attachment";
-    reply.header("Content-Type", file.mimeType);
-    reply.header("Content-Disposition", `${dispositionType}; filename="${encodeURIComponent(file.name)}"`);
-    reply.header("Accept-Ranges", "bytes");
-
-    // Content at a given file id only changes via docs' content-update
-    // endpoint (which bumps updatedAt), so it's a valid cache/ETag key.
-    // Without this, every video/image preview (thumbnail generation
-    // included — see VideoThumbnail.tsx) re-fetches the same bytes on
-    // every render instead of hitting the browser's HTTP cache.
-    const etag = `"${file.id}-${new Date(file.updatedAt).getTime()}"`;
-    reply.header("ETag", etag);
-    reply.header("Cache-Control", "private, max-age=3600, must-revalidate");
-    if (request.headers["if-none-match"] === etag) {
-      reply.code(304);
-      return reply.send();
-    }
-
-    const totalSize = Number(file.size);
-    const rangeHeader = request.headers.range;
-    // Range requests are what let <video>/<audio> seek and progressively
-    // buffer instead of pulling the whole file up front — this is the
-    // entire "streaming" mechanism, no transcoding involved, so it costs
-    // nothing extra at rest and only reads the bytes actually requested.
-    const match = rangeHeader ? /^bytes=(\d*)-(\d*)$/.exec(rangeHeader) : null;
-
-    if (match) {
-      const [, startStr, endStr] = match;
-      let start = startStr ? parseInt(startStr, 10) : undefined;
-      let end = endStr ? parseInt(endStr, 10) : undefined;
-
-      if (start === undefined && end !== undefined) {
-        // Suffix range ("bytes=-500" = last 500 bytes).
-        start = Math.max(totalSize - end, 0);
-        end = totalSize - 1;
-      } else if (end === undefined) {
-        end = totalSize - 1;
-      }
-
-      if (start === undefined || start > end! || start >= totalSize) {
-        reply.code(416);
-        reply.header("Content-Range", `bytes */${totalSize}`);
-        return reply.send();
-      }
-
-      end = Math.min(end!, totalSize - 1);
-      reply.code(206);
-      reply.header("Content-Range", `bytes ${start}-${end}/${totalSize}`);
-      reply.header("Content-Length", end - start + 1);
-      return reply.send(storage.read(file.storageKey, { start, end }));
-    }
-
-    reply.header("Content-Length", totalSize);
-    return reply.send(storage.read(file.storageKey));
+    return streamFileDownload(request, reply, file);
   },
 );
 
@@ -379,12 +535,11 @@ app.patch(
     const { id } = request.params as { id: string };
     try {
       await requireFileRole(id, request.user!.sub, "editor");
+      const { name } = request.body as { name: string };
+      return fileService.renameFile(id, name);
     } catch (err) {
-      if (err instanceof ForbiddenResourceError) return reply.code(403).send({ error: "forbidden" });
-      throw err;
+      return sendAclError(reply, err);
     }
-    const { name } = request.body as { name: string };
-    return fileService.renameFile(id, name);
   },
 );
 
@@ -393,14 +548,18 @@ app.patch(
   { preHandler: app.requirePermission(PERMISSIONS.files.file.move) },
   async (request, reply) => {
     const { id } = request.params as { id: string };
+    const { folderId } = request.body as { folderId: string | null };
     try {
       await requireFileRole(id, request.user!.sub, "editor");
+      if (folderId) {
+        await requireFolderRole(folderId, request.user!.sub, "editor");
+      } else {
+        await assertResourceOwner("file", id, request.user!.sub);
+      }
+      return fileService.moveFile(id, folderId);
     } catch (err) {
-      if (err instanceof ForbiddenResourceError) return reply.code(403).send({ error: "forbidden" });
-      throw err;
+      return sendAclError(reply, err);
     }
-    const { folderId } = request.body as { folderId: string | null };
-    return fileService.moveFile(id, folderId);
   },
 );
 
@@ -409,14 +568,21 @@ app.post(
   { preHandler: app.requirePermission(PERMISSIONS.files.file.upload) },
   async (request, reply) => {
     const { id } = request.params as { id: string };
+    const { targetFolderId } = request.body as { targetFolderId: string | null };
     try {
       await requireFileRole(id, request.user!.sub, "viewer");
+      if (targetFolderId) {
+        await requireFolderRole(targetFolderId, request.user!.sub, "editor");
+      }
+      return fileService.copyFile(storage, {
+        id,
+        ownerId: request.user!.sub,
+        targetFolderId,
+        rename: true,
+      });
     } catch (err) {
-      if (err instanceof ForbiddenResourceError) return reply.code(403).send({ error: "forbidden" });
-      throw err;
+      return sendAclError(reply, err);
     }
-    const { targetFolderId } = request.body as { targetFolderId: string | null };
-    return fileService.copyFile(storage, { id, ownerId: request.user!.sub, targetFolderId, rename: true });
   },
 );
 
@@ -426,12 +592,11 @@ app.delete(
   async (request, reply) => {
     const { id } = request.params as { id: string };
     try {
-      await requireFileRole(id, request.user!.sub, "owner");
+      await assertResourceOwner("file", id, request.user!.sub);
+      return fileService.softDeleteFile(id);
     } catch (err) {
-      if (err instanceof ForbiddenResourceError) return reply.code(403).send({ error: "forbidden" });
-      throw err;
+      return sendAclError(reply, err);
     }
-    return fileService.softDeleteFile(id);
   },
 );
 
@@ -449,16 +614,234 @@ app.post(
   { preHandler: app.requirePermission(PERMISSIONS.files.file.share) },
   async (request, reply) => {
     const { id } = request.params as { id: string };
+    const { userId, role } = request.body as { userId: string; role: string };
+    if (!isShareRole(role)) return reply.code(400).send({ error: "invalid_role" });
     try {
-      await requireFileRole(id, request.user!.sub, "owner");
+      await assertResourceOwner("file", id, request.user!.sub);
+      return shareService.shareFile(id, userId, role);
     } catch (err) {
-      if (err instanceof ForbiddenResourceError) return reply.code(403).send({ error: "forbidden" });
-      throw err;
+      return sendAclError(reply, err);
     }
-    const { userId, role } = request.body as { userId: string; role: "owner" | "editor" | "viewer" };
-    return fileService.shareFile(id, userId, role);
   },
 );
+
+app.delete(
+  "/files/:id/share/:userId",
+  { preHandler: app.requirePermission(PERMISSIONS.files.file.share) },
+  async (request, reply) => {
+    const { id, userId } = request.params as { id: string; userId: string };
+    try {
+      await assertResourceOwner("file", id, request.user!.sub);
+      await shareService.unshareFile(id, userId);
+      return reply.code(204).send();
+    } catch (err) {
+      return sendAclError(reply, err);
+    }
+  },
+);
+
+app.get(
+  "/files/:id/permissions",
+  { preHandler: app.requirePermission(PERMISSIONS.files.file.share) },
+  async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      await assertResourceOwner("file", id, request.user!.sub);
+      return shareService.listFilePermissions(id);
+    } catch (err) {
+      return sendAclError(reply, err);
+    }
+  },
+);
+
+app.post(
+  "/files/:id/links",
+  { preHandler: app.requirePermission(PERMISSIONS.files.file.share) },
+  async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const body = (request.body as { expiresAt?: string | null } | undefined) ?? {};
+    try {
+      await assertResourceOwner("file", id, request.user!.sub);
+      const expiresAt = body.expiresAt ? new Date(body.expiresAt) : null;
+      const { link, token } = await shareService.createShareLink({
+        targetType: "file",
+        targetId: id,
+        createdBy: request.user!.sub,
+        expiresAt,
+      });
+      return { id: link.id, token, expiresAt: link.expiresAt, createdAt: link.createdAt };
+    } catch (err) {
+      return sendAclError(reply, err);
+    }
+  },
+);
+
+app.get(
+  "/files/:id/links",
+  { preHandler: app.requirePermission(PERMISSIONS.files.file.share) },
+  async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      await assertResourceOwner("file", id, request.user!.sub);
+      const links = await shareService.listShareLinks("file", id);
+      return links.map((l) => ({
+        id: l.id,
+        expiresAt: l.expiresAt,
+        createdAt: l.createdAt,
+        revokedAt: l.revokedAt,
+      }));
+    } catch (err) {
+      return sendAclError(reply, err);
+    }
+  },
+);
+
+app.delete(
+  "/files/:id/links/:linkId",
+  { preHandler: app.requirePermission(PERMISSIONS.files.file.share) },
+  async (request, reply) => {
+    const { id, linkId } = request.params as { id: string; linkId: string };
+    try {
+      await assertResourceOwner("file", id, request.user!.sub);
+      await shareService.revokeShareLink(linkId, request.user!.sub);
+      return reply.code(204).send();
+    } catch (err) {
+      return sendAclError(reply, err);
+    }
+  },
+);
+
+app.get("/shared", { preHandler: app.requireAuth }, async (request) => {
+  return shareService.listSharedWithMe(request.user!.sub);
+});
+
+// --- Public share links (no JWT) ---
+
+app.get("/public/links/:token", async (request, reply) => {
+  const { token } = request.params as { token: string };
+  try {
+    const link = await shareService.resolveShareLink(token);
+    if (link.targetType === "file") {
+      const file = await fileService.getFile(link.targetId);
+      if (file.deletedAt) return reply.code(404).send({ error: "not_found" });
+      return {
+        targetType: "file" as const,
+        file: {
+          id: file.id,
+          name: file.name,
+          size: file.size,
+          mimeType: file.mimeType,
+          updatedAt: file.updatedAt,
+        },
+      };
+    }
+    const folder = await folderService.getFolder(link.targetId);
+    if (folder.deletedAt) return reply.code(404).send({ error: "not_found" });
+    return {
+      targetType: "folder" as const,
+      folder: { id: folder.id, name: folder.name, updatedAt: folder.updatedAt },
+    };
+  } catch (err) {
+    if (err instanceof shareService.InvalidShareLinkError) {
+      return reply.code(404).send({ error: err.message });
+    }
+    throw err;
+  }
+});
+
+app.get("/public/links/:token/children", async (request, reply) => {
+  const { token } = request.params as { token: string };
+  const parentId = (request.query as { parentId?: string }).parentId;
+  try {
+    const link = await shareService.resolveShareLink(token);
+    if (link.targetType !== "folder") {
+      return reply.code(400).send({ error: "not_a_folder_link" });
+    }
+
+    const folderId = parentId ?? link.targetId;
+    if (folderId !== link.targetId) {
+      // parentId must be under the shared folder tree
+      let current: string | null = folderId;
+      let under = false;
+      while (current) {
+        if (current === link.targetId) {
+          under = true;
+          break;
+        }
+        const folder = await folderService.getFolder(current);
+        current = folder.parentId;
+      }
+      if (!under) return reply.code(403).send({ error: "forbidden" });
+    }
+
+    const [folders, files] = await Promise.all([
+      prisma.folder.findMany({
+        where: { parentId: folderId, deletedAt: null },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true, parentId: true, updatedAt: true },
+      }),
+      prisma.file.findMany({
+        where: { folderId, deletedAt: null },
+        orderBy: { name: "asc" },
+        select: {
+          id: true,
+          name: true,
+          folderId: true,
+          size: true,
+          mimeType: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      }),
+    ]);
+
+    const breadcrumb = await folderService.breadcrumbFromRoot(folderId, link.targetId);
+    return { folders, files, breadcrumb };
+  } catch (err) {
+    if (err instanceof shareService.InvalidShareLinkError) {
+      return reply.code(404).send({ error: err.message });
+    }
+    throw err;
+  }
+});
+
+app.get("/public/links/:token/download", async (request, reply) => {
+  const { token } = request.params as { token: string };
+  try {
+    const link = await shareService.resolveShareLink(token);
+    if (link.targetType !== "file") {
+      return reply.code(400).send({ error: "not_a_file_link" });
+    }
+    const file = await fileService.getFile(link.targetId);
+    if (file.deletedAt) return reply.code(404).send({ error: "not_found" });
+    return streamFileDownload(request, reply, file);
+  } catch (err) {
+    if (err instanceof shareService.InvalidShareLinkError) {
+      return reply.code(404).send({ error: err.message });
+    }
+    throw err;
+  }
+});
+
+app.get("/public/links/:token/files/:fileId/download", async (request, reply) => {
+  const { token, fileId } = request.params as { token: string; fileId: string };
+  try {
+    const link = await shareService.resolveShareLink(token);
+    if (link.targetType !== "folder") {
+      return reply.code(400).send({ error: "not_a_folder_link" });
+    }
+    const under = await isFileUnderFolder(fileId, link.targetId);
+    if (!under) return reply.code(403).send({ error: "forbidden" });
+    const file = await fileService.getFile(fileId);
+    if (file.deletedAt) return reply.code(404).send({ error: "not_found" });
+    return streamFileDownload(request, reply, file);
+  } catch (err) {
+    if (err instanceof shareService.InvalidShareLinkError) {
+      return reply.code(404).send({ error: err.message });
+    }
+    throw err;
+  }
+});
 
 app.get("/trash", { preHandler: app.requireAuth }, async (request) => {
   return fileService.listTrash(request.user!.sub);

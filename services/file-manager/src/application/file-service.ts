@@ -114,14 +114,6 @@ export async function searchFiles(ownerId: string, query: string) {
   });
 }
 
-export async function shareFile(fileId: string, userId: string, role: "owner" | "editor" | "viewer") {
-  return prisma.filePermission.upsert({
-    where: { fileId_userId: { fileId, userId } },
-    update: { role },
-    create: { fileId, userId, role },
-  });
-}
-
 export async function getFile(id: string) {
   return prisma.file.findUniqueOrThrow({ where: { id } });
 }

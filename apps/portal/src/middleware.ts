@@ -3,7 +3,7 @@ import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE, AUTH_SERVICE_URL } from "@/l
 import { setAuthCookies, clearAuthCookies } from "@/lib/auth-cookies";
 import { decodeJwtExpiry } from "@/lib/jwt-decode";
 
-const PUBLIC_PATHS = ["/login"];
+const PUBLIC_PATHS = ["/login", "/s"];
 const REFRESH_MARGIN_SECONDS = 120; // refresh a bit before expiry, not exactly at it
 
 async function refreshSession(refreshToken: string): Promise<{ accessToken: string; refreshToken: string } | null> {

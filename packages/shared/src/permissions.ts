@@ -35,6 +35,7 @@ export const PERMISSIONS = {
     user: {
       invite: "users.user.invite",
       manage: "users.user.manage",
+      lookup: "users.user.lookup",
     },
     role: {
       manage: "users.role.manage",
@@ -62,6 +63,7 @@ export const DEFAULT_ROLES = {
     PERMISSIONS.docs.document.create,
     PERMISSIONS.docs.document.edit,
     PERMISSIONS.docs.document.export,
+    PERMISSIONS.users.user.lookup,
   ],
   viewer: [PERMISSIONS.files.file.download],
 } as const;

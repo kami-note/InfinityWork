@@ -68,11 +68,13 @@ export function DocumentEditor({
   initialContent,
   initialName,
   folderId,
+  readOnly = false,
 }: {
   fileId: string;
   initialContent: unknown;
   initialName: string;
   folderId: string | null;
+  readOnly?: boolean;
 }) {
   const router = useRouter();
   const { doc: initialDoc, margin: initialMargin } = useMemo(() => unwrapSavedContent(initialContent), [initialContent]);
@@ -93,8 +95,10 @@ export function DocumentEditor({
   const editor = useEditor({
     extensions,
     content: initialDoc as never,
+    editable: !readOnly,
     immediatelyRender: false,
     onUpdate: ({ editor }) => {
+      if (readOnly) return;
       setStatus("saving");
       if (saveTimeout.current) clearTimeout(saveTimeout.current);
       // Debounced autosave: keeps every keystroke from hitting the network
@@ -168,7 +172,9 @@ export function DocumentEditor({
 
   if (!editor) return null;
 
-  const statusLabel = { saved: "Salvo", saving: "Salvando...", error: "Erro ao salvar" }[status];
+  const statusLabel = readOnly
+    ? "Somente leitura"
+    : { saved: "Salvo", saving: "Salvando...", error: "Erro ao salvar" }[status];
 
   return (
     <div className="flex h-full flex-col">
@@ -176,6 +182,7 @@ export function DocumentEditor({
         <input
           value={title}
           onChange={(e) => handleTitleChange(e.target.value)}
+          readOnly={readOnly}
           size={Math.max(title.length, 8)}
           className="max-w-md rounded border border-transparent px-2 py-1 text-xl outline-none hover:border-neutral-300 focus:border-neutral-300 focus:bg-white dark:hover:border-neutral-700 dark:focus:border-neutral-700 dark:focus:bg-neutral-800"
         />
@@ -187,7 +194,9 @@ export function DocumentEditor({
         </div>
       </div>
 
-      <DocumentToolbar editor={editor} margin={margin} onMarginChange={handleMarginChange} onInsertImage={handleInsertImage} />
+      {!readOnly && (
+        <DocumentToolbar editor={editor} margin={margin} onMarginChange={handleMarginChange} onInsertImage={handleInsertImage} />
+      )}
 
       <div className="flex-1 overflow-auto bg-neutral-100 py-8 dark:bg-neutral-950">
         {/* A4-ish "page" (816px ≈ 8.5in @96dpi), echoing Google Docs' page

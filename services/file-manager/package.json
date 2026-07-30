@@ -9,7 +9,7 @@
     "start": "node dist/interface/server.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
-    "test": "node --import tsx --test src/application/chunked-upload-service.test.ts"
+    "test": "node --import tsx --test src/application/chunked-upload-service.test.ts src/application/share-service.test.ts src/application/access-control.test.ts"
   },
   "dependencies": {
     "@infinitywork/shared": "*",

@@ -32,6 +32,20 @@ export async function findUserWithPermissionsById(
   return rest;
 }
 
+/** Exact email match (case-insensitive). Returns public profile fields only. */
+export async function findUserPublicByEmail(
+  email: string,
+): Promise<{ id: string; email: string; name: string } | null> {
+  const user = await prisma.user.findFirst({
+    where: {
+      email: { equals: email, mode: "insensitive" },
+      disabledAt: null,
+    },
+    select: { id: true, email: true, name: true },
+  });
+  return user;
+}
+
 function toAuthenticatedUser(user: {
   id: string;
   email: string;
