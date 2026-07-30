@@ -5,29 +5,54 @@ import { VideoTheaterLayout } from "./VideoTheaterLayout";
 import { DOCX_MIME_TYPE, isTextLike } from "@/lib/viewer-types";
 import type { FileDto } from "@/lib/file-manager-client";
 
+export type FileViewerSource = {
+  downloadUrl: string;
+  upNext?: FileDto[];
+  upNextHrefFor?: (id: string) => string;
+  upNextThumbnailSrcFor?: (id: string) => string;
+};
+
+function withInline(downloadUrl: string) {
+  return `${downloadUrl}${downloadUrl.includes("?") ? "&" : "?"}disposition=inline`;
+}
+
 export function FileViewer({
   file,
-  upNext = [],
+  source,
 }: {
   file: { id: string; name: string; mimeType: string };
-  upNext?: FileDto[];
+  /** Defaults to the authenticated `/api/files/:id/download` proxy. */
+  source?: FileViewerSource;
 }) {
-  const downloadUrl = `/api/files/${file.id}/download`;
-  // Content-Disposition: attachment (the default) forces a download dialog
-  // instead of rendering — every embed below needs the inline variant.
-  const inlineUrl = `${downloadUrl}?disposition=inline`;
+  const downloadUrl = source?.downloadUrl ?? `/api/files/${file.id}/download`;
+  const inlineUrl = withInline(downloadUrl);
+  const upNext = source?.upNext ?? [];
 
   if (file.mimeType.startsWith("image/")) {
-    // eslint-disable-next-line @next/next/no-img-element -- proxied through our own auth route
+    // eslint-disable-next-line @next/next/no-img-element -- proxied through our own auth/share route
     return <img src={inlineUrl} alt={file.name} className="mx-auto max-h-[80vh] rounded" />;
   }
 
   if (file.mimeType === "application/pdf") {
-    return <iframe src={inlineUrl} title={file.name} className="h-[85vh] w-full rounded border border-neutral-200 dark:border-neutral-800" />;
+    return (
+      <iframe
+        src={inlineUrl}
+        title={file.name}
+        className="h-[85vh] w-full rounded border border-neutral-200 dark:border-neutral-800"
+      />
+    );
   }
 
   if (file.mimeType.startsWith("video/")) {
-    return <VideoTheaterLayout url={inlineUrl} name={file.name} upNext={upNext} />;
+    return (
+      <VideoTheaterLayout
+        url={inlineUrl}
+        name={file.name}
+        upNext={upNext}
+        hrefFor={source?.upNextHrefFor}
+        thumbnailSrcFor={source?.upNextThumbnailSrcFor}
+      />
+    );
   }
 
   if (file.mimeType.startsWith("audio/")) {

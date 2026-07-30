@@ -823,6 +823,33 @@ app.get("/public/links/:token/download", async (request, reply) => {
   }
 });
 
+app.get("/public/links/:token/files/:fileId", async (request, reply) => {
+  const { token, fileId } = request.params as { token: string; fileId: string };
+  try {
+    const link = await shareService.resolveShareLink(token);
+    if (link.targetType !== "folder") {
+      return reply.code(400).send({ error: "not_a_folder_link" });
+    }
+    const under = await isFileUnderFolder(fileId, link.targetId);
+    if (!under) return reply.code(403).send({ error: "forbidden" });
+    const file = await fileService.getFile(fileId);
+    if (file.deletedAt) return reply.code(404).send({ error: "not_found" });
+    return {
+      id: file.id,
+      name: file.name,
+      size: file.size,
+      mimeType: file.mimeType,
+      folderId: file.folderId,
+      updatedAt: file.updatedAt,
+    };
+  } catch (err) {
+    if (err instanceof shareService.InvalidShareLinkError) {
+      return reply.code(404).send({ error: err.message });
+    }
+    throw err;
+  }
+});
+
 app.get("/public/links/:token/files/:fileId/download", async (request, reply) => {
   const { token, fileId } = request.params as { token: string; fileId: string };
   try {

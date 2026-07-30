@@ -5,7 +5,19 @@ import { VideoPlayer } from "./viewers/VideoPlayer";
 import { UpNextList } from "./UpNextList";
 import type { FileDto } from "@/lib/file-manager-client";
 
-export function VideoTheaterLayout({ url, name, upNext }: { url: string; name: string; upNext: FileDto[] }) {
+export function VideoTheaterLayout({
+  url,
+  name,
+  upNext,
+  hrefFor,
+  thumbnailSrcFor,
+}: {
+  url: string;
+  name: string;
+  upNext: FileDto[];
+  hrefFor?: (id: string) => string;
+  thumbnailSrcFor?: (id: string) => string;
+}) {
   const [theaterMode, setTheaterMode] = useState(false);
 
   return (
@@ -13,7 +25,7 @@ export function VideoTheaterLayout({ url, name, upNext }: { url: string; name: s
       <div className="min-w-0 flex-1">
         <VideoPlayer url={url} name={name} theaterMode={theaterMode} onToggleTheater={() => setTheaterMode((v) => !v)} />
       </div>
-      <UpNextList videos={upNext} />
+      <UpNextList videos={upNext} hrefFor={hrefFor} thumbnailSrcFor={thumbnailSrcFor} />
     </div>
   );
 }
