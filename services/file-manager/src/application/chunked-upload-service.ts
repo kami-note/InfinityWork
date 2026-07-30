@@ -416,6 +416,12 @@ export class ChunkedUploadService {
       await this.writeMeta(uploadId, meta);
     } catch {
       await this.markFailed(uploadId, meta, "assemble_failed");
+    } finally {
+      if (global.gc) {
+        setTimeout(() => {
+          global.gc?.();
+        }, 0);
+      }
     }
   }
 

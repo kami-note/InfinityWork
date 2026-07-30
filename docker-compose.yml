@@ -67,6 +67,7 @@ services:
       CHUNK_UPLOAD_MAX_REQUEST_BYTES: ${CHUNK_UPLOAD_MAX_REQUEST_BYTES:-94371840}
       PORTAL_ORIGIN: http://portal:3000
       PORT: 4002
+      NODE_OPTIONS: "--expose-gc"
     volumes:
       - ./data/storage:/data/storage
     networks: [internal]

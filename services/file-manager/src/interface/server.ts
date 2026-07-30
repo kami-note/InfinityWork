@@ -119,6 +119,12 @@ app.post(
       // behind a misleading error the first time this code shipped.
       request.log.error(err);
       return reply.code(500).send({ error: "upload_failed" });
+    } finally {
+      if (global.gc) {
+        setTimeout(() => {
+          global.gc?.();
+        }, 0);
+      }
     }
   },
 );
@@ -196,6 +202,12 @@ app.put(
       return reply.code(204).send();
     } catch (err) {
       return sendChunkedError(reply, err);
+    } finally {
+      if (global.gc) {
+        setTimeout(() => {
+          global.gc?.();
+        }, 0);
+      }
     }
   },
 );
