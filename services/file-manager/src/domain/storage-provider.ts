@@ -21,4 +21,11 @@ export interface StorageProvider {
   write(stream: Readable): Promise<StoredObject>;
   read(storageKey: string, range?: ByteRange): Readable;
   delete(storageKey: string): Promise<void>;
+  /**
+   * Create a new stored object by copying the bytes of an existing storageKey.
+   * If `checksumSha256` is provided the provider SHOULD NOT recompute the hash
+   * and may return the provided value directly. This enables callers to
+   * avoid recomputing hashes when the domain already knows the checksum.
+   */
+  copyFrom(storageKey: string, checksumSha256?: string | null): Promise<StoredObject>;
 }

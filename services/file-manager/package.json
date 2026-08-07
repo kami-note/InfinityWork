@@ -17,6 +17,7 @@
     "@infinitywork/shared": "*",
     "@prisma/client": "^5.22.0",
     "fastify": "^5.1.0",
+    "p-limit": "^4.0.0",
     "p-queue": "^9.3.3",
     "sharp": "^0.34.5",
     "zod": "^3.23.8"

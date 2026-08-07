@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, rm, stat, copyFile as copyFileFs } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -61,5 +61,25 @@ export class LocalStorageProvider implements StorageProvider {
 
   async delete(storageKey: string): Promise<void> {
     await rm(this.pathFor(storageKey), { force: true });
+  }
+
+  async copyFrom(storageKey: string, checksumSha256: string | null = null): Promise<StoredObject> {
+    const srcPath = this.pathFor(storageKey);
+    const newKey = randomUUID();
+    const destPath = this.pathFor(newKey);
+    await mkdir(dirname(destPath), { recursive: true });
+    await copyFileFs(srcPath, destPath);
+    const st = await stat(destPath);
+    // If caller provided a checksum, trust it to avoid recomputing.
+    if (checksumSha256) {
+      return { storageKey: newKey, size: st.size, checksumSha256: checksumSha256 };
+    }
+    // Fallback: compute checksum (rare path).
+    const hash = createHash("sha256");
+    const stream = createReadStream(destPath);
+    for await (const chunk of stream) {
+      hash.update(chunk);
+    }
+    return { storageKey: newKey, size: st.size, checksumSha256: hash.digest("hex") };
   }
 }

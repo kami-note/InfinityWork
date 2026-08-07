@@ -29,3 +29,21 @@ export async function revokeAllForUser(userId: string) {
     data: { revokedAt: new Date() },
   });
 }
+
+export async function cleanupExpired(): Promise<number> {
+  const result = await prisma.refreshToken.deleteMany({
+    where: { expiresAt: { lt: new Date() } },
+  });
+  return result.count;
+}
+
+export function startCleanupScheduler(log?: { info: (o: unknown, msg?: string) => void }) {
+  const run = () => {
+    void cleanupExpired().then((n) => {
+      if (n > 0) log?.info({ removed: n }, "cleaned expired refresh tokens");
+    });
+  };
+  run();
+  // run once per day
+  setInterval(run, 24 * 60 * 60 * 1000).unref?.();
+}

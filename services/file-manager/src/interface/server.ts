@@ -276,7 +276,7 @@ app.get(
     try {
       await assertResourceOwner("folder", id, request.user!.sub);
       const links = await shareService.listShareLinks("folder", id);
-      return links.map((l) => ({
+      return links.map((l: any) => ({
         id: l.id,
         expiresAt: l.expiresAt,
         createdAt: l.createdAt,
@@ -707,7 +707,7 @@ app.get(
     try {
       await assertResourceOwner("file", id, request.user!.sub);
       const links = await shareService.listShareLinks("file", id);
-      return links.map((l) => ({
+      return links.map((l: any) => ({
         id: l.id,
         expiresAt: l.expiresAt,
         createdAt: l.createdAt,

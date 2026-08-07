@@ -1,4 +1,5 @@
 import argon2 from "argon2";
+import { hashPassword } from "./password-hasher.js";
 import { DEFAULT_ROLES } from "@infinitywork/shared";
 import { prisma } from "./prisma.js";
 
@@ -35,7 +36,7 @@ async function main() {
 
   const existing = await prisma.user.findUnique({ where: { email: adminEmail } });
   if (!existing) {
-    const passwordHash = await argon2.hash(adminPassword, { type: argon2.argon2id });
+    const passwordHash = await hashPassword(adminPassword);
     const admin = await prisma.user.create({
       data: { email: adminEmail, name: "Admin", passwordHash },
     });

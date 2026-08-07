@@ -73,8 +73,8 @@ export async function listSharedWithMe(userId: string) {
   ]);
 
   return {
-    files: fileGrants.map((g) => ({ ...g.file, role: g.role })),
-    folders: folderGrants.map((g) => ({ ...g.folder, role: g.role })),
+    files: fileGrants.map((g: any) => ({ ...g.file, role: g.role })),
+    folders: folderGrants.map((g: any) => ({ ...g.folder, role: g.role })),
   };
 }
 
