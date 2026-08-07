@@ -57,7 +57,9 @@ export async function copyFile(
   params: { id: string; ownerId: string; targetFolderId: string | null; rename: boolean },
 ) {
   const original = await prisma.file.findUniqueOrThrow({ where: { id: params.id } });
-  const stored = await storage.write(storage.read(original.storageKey));
+  // Avoid recomputing SHA-256: ask storage to copy the existing object and
+  // reuse the checksum already stored in the DB for the original file.
+  const stored = await storage.copyFrom(original.storageKey, original.checksumSha256);
   return prisma.file.create({
     data: {
       name: params.rename ? `Cópia de ${original.name}` : original.name,
@@ -66,7 +68,8 @@ export async function copyFile(
       storageKey: stored.storageKey,
       size: stored.size,
       mimeType: original.mimeType,
-      checksumSha256: stored.checksumSha256,
+      // Persist original checksum to avoid recomputing on copy.
+      checksumSha256: original.checksumSha256,
     },
   });
 }
@@ -95,9 +98,11 @@ export async function permanentlyDeleteFile(storage: StorageProvider, id: string
 
 export async function emptyTrash(storage: StorageProvider, ownerId: string) {
   const trashed = await prisma.file.findMany({ where: { ownerId, deletedAt: { not: null } } });
-  for (const file of trashed) {
-    await storage.delete(file.storageKey);
-  }
+  // Delete objects in parallel but limit concurrency to avoid overwhelming the host.
+  // Use a small concurrency limit (4) to reduce CPU/disk contention.
+  const pLimit = (await import("p-limit")).default;
+  const limit = pLimit(4);
+  await Promise.all(trashed.map((f) => limit(() => storage.delete(f.storageKey))));
   await prisma.file.deleteMany({ where: { ownerId, deletedAt: { not: null } } });
   return { deleted: trashed.length };
 }
