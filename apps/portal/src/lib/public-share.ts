@@ -6,6 +6,7 @@ export type PublicShareFile = {
   name: string;
   size: string;
   mimeType: string;
+  thumbnailStatus?: "none" | "pending" | "ready" | "failed";
   folderId?: string | null;
   createdAt?: string;
   updatedAt?: string;
@@ -69,6 +70,7 @@ export function toFileDto(file: PublicShareFile): FileDto {
     folderId: file.folderId ?? null,
     size: file.size,
     mimeType: file.mimeType,
+    thumbnailStatus: file.thumbnailStatus,
     createdAt: file.createdAt ?? "",
     updatedAt: file.updatedAt ?? "",
   };

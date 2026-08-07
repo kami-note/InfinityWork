@@ -1,4 +1,5 @@
 import argon2 from "argon2";
+import { verifyPassword } from "../infrastructure/password-hasher.js";
 import ms from "ms";
 import { signAccessToken, signRefreshToken } from "@infinitywork/shared";
 import {
@@ -33,7 +34,7 @@ export async function login(email: string, password: string) {
   const user = await findUserWithPermissionsByEmail(email);
   if (!user) throw new InvalidCredentialsError();
 
-  const valid = await argon2.verify(user.passwordHash, password);
+  const valid = await verifyPassword(user.passwordHash, password);
   if (!valid) throw new InvalidCredentialsError();
 
   return issueTokenPair(user);

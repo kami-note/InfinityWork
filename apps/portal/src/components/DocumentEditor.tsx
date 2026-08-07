@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import History from "@tiptap/extension-history";
 import Underline from "@tiptap/extension-underline";
 import TextStyle from "@tiptap/extension-text-style";
 import FontFamily from "@tiptap/extension-font-family";
@@ -45,6 +46,8 @@ const BASE_EXTENSIONS = [
   // Levels 1-5 back the style dropdown's Título/Subtítulo/Título 1-3 —
   // see the comment above STYLE_OPTIONS in DocumentToolbar.tsx.
   StarterKit.configure({ heading: { levels: [1, 2, 3, 4, 5] } }),
+  // Limit the editor history depth to reduce memory usage in long editing sessions.
+  History.configure({ depth: 50 }),
   PageBreak,
   Underline,
   TextStyle,

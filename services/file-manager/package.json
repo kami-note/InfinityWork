@@ -9,20 +9,23 @@
     "start": "node dist/interface/server.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
-    "test": "node --import tsx --test src/application/chunked-upload-service.test.ts src/application/share-service.test.ts src/application/access-control.test.ts"
+    "test": "node --import tsx --test src/application/chunked-upload-service.test.ts src/application/share-service.test.ts src/application/access-control.test.ts src/application/thumbnail-service.test.ts"
   },
   "dependencies": {
+    "@fastify/cors": "^10.0.1",
+    "@fastify/multipart": "^9.0.1",
     "@infinitywork/shared": "*",
     "@prisma/client": "^5.22.0",
     "fastify": "^5.1.0",
-    "@fastify/cors": "^10.0.1",
-    "@fastify/multipart": "^9.0.1",
+    "p-limit": "^4.0.0",
+    "p-queue": "^9.3.3",
+    "sharp": "^0.34.5",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/node": "^22.9.0",
     "prisma": "^5.22.0",
     "tsx": "^4.19.2",
-    "typescript": "^5.6.3",
-    "@types/node": "^22.9.0"
+    "typescript": "^5.6.3"
   }
 }

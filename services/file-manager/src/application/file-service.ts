@@ -1,13 +1,15 @@
 import type { Readable } from "node:stream";
 import { prisma } from "../infrastructure/prisma.js";
 import type { StorageProvider } from "../domain/storage-provider.js";
+import { enqueueThumbnailGeneration } from "./thumbnail-service.js";
 
 export async function uploadFile(
   storage: StorageProvider,
   params: { ownerId: string; folderId: string | null; name: string; mimeType: string; stream: Readable },
 ) {
   const stored = await storage.write(params.stream);
-  return prisma.file.create({
+  const isImage = params.mimeType.startsWith("image/");
+  const file = await prisma.file.create({
     data: {
       name: params.name,
       folderId: params.folderId,
@@ -16,8 +18,17 @@ export async function uploadFile(
       size: stored.size,
       mimeType: params.mimeType,
       checksumSha256: stored.checksumSha256,
+      thumbnailStatus: isImage ? "pending" : "none",
     },
   });
+
+  if (isImage) {
+    enqueueThumbnailGeneration(storage, file.id).catch((err) => {
+      console.error("Failed to enqueue thumbnail generation:", err);
+    });
+  }
+
+  return file;
 }
 
 /**
@@ -32,6 +43,7 @@ export async function updateFileContent(
 ) {
   const existing = await prisma.file.findUniqueOrThrow({ where: { id: params.id } });
   const stored = await storage.write(params.stream);
+  const isImage = params.mimeType.startsWith("image/");
   const updated = await prisma.file.update({
     where: { id: params.id },
     data: {
@@ -39,9 +51,22 @@ export async function updateFileContent(
       size: stored.size,
       mimeType: params.mimeType,
       checksumSha256: stored.checksumSha256,
+      thumbnailStatus: isImage ? "pending" : "none",
+      thumbnailStorageKey: null,
     },
   });
+
+  if (isImage) {
+    enqueueThumbnailGeneration(storage, updated.id).catch((err) => {
+      console.error("Failed to enqueue thumbnail generation:", err);
+    });
+  }
+
   await storage.delete(existing.storageKey);
+  if (existing.thumbnailStorageKey) {
+    await storage.delete(existing.thumbnailStorageKey).catch(() => {});
+  }
+
   return updated;
 }
 
@@ -57,8 +82,20 @@ export async function copyFile(
   params: { id: string; ownerId: string; targetFolderId: string | null; rename: boolean },
 ) {
   const original = await prisma.file.findUniqueOrThrow({ where: { id: params.id } });
-  const stored = await storage.write(storage.read(original.storageKey));
-  return prisma.file.create({
+  const isImage = original.mimeType.startsWith("image/");
+
+  // Avoid recomputing SHA-256: ask storage to copy the existing object and
+  // reuse the checksum already stored in the DB for the original file.
+  const stored = await storage.copyFrom(original.storageKey, original.checksumSha256);
+
+  // If the original already has a ready thumbnail, copy those bytes too
+  // instead of re-running sharp — the copy is pixel-identical to the source.
+  const hasReadyThumbnail = isImage && original.thumbnailStatus === "ready" && original.thumbnailStorageKey;
+  const copiedThumbnail = hasReadyThumbnail
+    ? await storage.copyFrom(original.thumbnailStorageKey!)
+    : null;
+
+  const file = await prisma.file.create({
     data: {
       name: params.rename ? `Cópia de ${original.name}` : original.name,
       folderId: params.targetFolderId,
@@ -66,9 +103,20 @@ export async function copyFile(
       storageKey: stored.storageKey,
       size: stored.size,
       mimeType: original.mimeType,
-      checksumSha256: stored.checksumSha256,
+      // Persist original checksum to avoid recomputing on copy.
+      checksumSha256: original.checksumSha256,
+      thumbnailStatus: isImage ? (copiedThumbnail ? "ready" : "pending") : "none",
+      thumbnailStorageKey: copiedThumbnail?.storageKey ?? null,
     },
   });
+
+  if (isImage && !copiedThumbnail) {
+    enqueueThumbnailGeneration(storage, file.id).catch((err) => {
+      console.error("Failed to enqueue thumbnail generation:", err);
+    });
+  }
+
+  return file;
 }
 
 export async function renameFile(id: string, name: string) {
@@ -90,14 +138,27 @@ export async function restoreFile(id: string) {
 export async function permanentlyDeleteFile(storage: StorageProvider, id: string) {
   const file = await prisma.file.findUniqueOrThrow({ where: { id } });
   await storage.delete(file.storageKey);
+  if (file.thumbnailStorageKey) {
+    await storage.delete(file.thumbnailStorageKey).catch(() => {});
+  }
   await prisma.file.delete({ where: { id } });
 }
 
 export async function emptyTrash(storage: StorageProvider, ownerId: string) {
   const trashed = await prisma.file.findMany({ where: { ownerId, deletedAt: { not: null } } });
-  for (const file of trashed) {
-    await storage.delete(file.storageKey);
-  }
+  // Delete objects in parallel but limit concurrency to avoid overwhelming the host.
+  const pLimit = (await import("p-limit")).default;
+  const limit = pLimit(4);
+  await Promise.all(
+    trashed.map((file) =>
+      limit(async () => {
+        await storage.delete(file.storageKey);
+        if (file.thumbnailStorageKey) {
+          await storage.delete(file.thumbnailStorageKey).catch(() => {});
+        }
+      }),
+    ),
+  );
   await prisma.file.deleteMany({ where: { ownerId, deletedAt: { not: null } } });
   return { deleted: trashed.length };
 }

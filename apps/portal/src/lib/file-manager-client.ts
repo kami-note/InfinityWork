@@ -13,6 +13,7 @@ export interface FileDto {
   folderId: string | null;
   size: string;
   mimeType: string;
+  thumbnailStatus?: "none" | "pending" | "ready" | "failed";
   createdAt: string;
   updatedAt: string;
   role?: "owner" | "editor" | "viewer" | null;

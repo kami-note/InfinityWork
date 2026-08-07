@@ -13,6 +13,7 @@ import {
   findUserWithPermissionsById,
   findUserPublicByEmail,
 } from "../infrastructure/user-repository.js";
+import { startCleanupScheduler } from "../infrastructure/refresh-token-repository.js";
 
 const JWT_SECRET = process.env.JWT_SECRET!;
 if (!JWT_SECRET) throw new Error("JWT_SECRET is required");
@@ -100,6 +101,9 @@ app.get("/users/search", async (request, reply) => {
 });
 
 const port = Number(process.env.PORT ?? 4001);
+// Start periodic cleanup of expired refresh tokens. Runs once/day and is
+// intentionally decoupled from request handling so it cannot impact latency.
+startCleanupScheduler(app.log);
 app.listen({ port, host: "0.0.0.0" }).catch((err) => {
   app.log.error(err);
   process.exit(1);
