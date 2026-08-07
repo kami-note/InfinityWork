@@ -1,14 +1,9 @@
 import { Suspense } from "react";
-import dynamic from "next/dynamic";
 import { requireAccessToken } from "@/lib/session";
 import { getDocumentContent } from "@/lib/docs-client";
 import { getFile } from "@/lib/file-manager-client";
 import { Topbar } from "@/components/Topbar";
-
-// Dynamically load the heavy TipTap-based editor on the client only.
-const DocumentEditor = dynamic(() => import("@/components/DocumentEditor").then((m) => m.DocumentEditor), {
-  ssr: false,
-});
+import { DocumentEditorLazy } from "@/components/DocumentEditorLazy";
 
 export default async function DocumentPage({ params }: { params: Promise<{ fileId: string }> }) {
   const { fileId } = await params;
@@ -22,7 +17,7 @@ export default async function DocumentPage({ params }: { params: Promise<{ fileI
         <Topbar />
       </Suspense>
       <div className="min-h-0 flex-1">
-        <DocumentEditor
+        <DocumentEditorLazy
           fileId={fileId}
           initialContent={content}
           initialName={file.name}
