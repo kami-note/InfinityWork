@@ -24,6 +24,8 @@
     "@tiptap/extension-text-align": "^2.27.2",
     "@tiptap/extension-text-style": "^2.27.2",
     "@tiptap/extension-underline": "^2.27.2",
+    "@tiptap/extension-history": "^2.27.2",
+    "@tanstack/react-virtual": "^4.0.0",
     "@tiptap/pm": "^2.9.1",
     "@tiptap/react": "^2.9.1",
     "@tiptap/starter-kit": "^2.9.1",

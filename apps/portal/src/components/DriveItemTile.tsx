@@ -9,7 +9,16 @@ import { formatSize } from "@/lib/format";
 
 export type DriveItem =
   | { kind: "folder"; id: string; name: string; updatedAt: string }
-  | { kind: "file"; id: string; name: string; size: string; mimeType: string; updatedAt: string };
+  | {
+      kind: "file";
+      id: string;
+      name: string;
+      size: string;
+      mimeType: string;
+      updatedAt: string;
+      // Optional thumbnail pipeline status (may be undefined for older API responses).
+      thumbnailStatus?: "none" | "pending" | "ready" | "failed";
+    };
 
 export function DriveItemTile({
   item,
@@ -88,14 +97,9 @@ export function DriveItemTile({
       <div className="mb-2 flex h-16 w-16 items-center justify-center">
         {item.kind === "folder" ? (
           <FolderIcon size={48} />
-        ) : isImage ? (
+        ) : isImage && item.thumbnailStatus === "ready" ? (
           // eslint-disable-next-line @next/next/no-img-element -- proxied through our own auth route, not a static asset Next can optimize
-          <img
-            src={`/api/files/${item.id}/download`}
-            alt={item.name}
-            loading="lazy"
-            className="h-16 w-16 rounded object-cover"
-          />
+          <img src={`/api/files/${item.id}/thumbnail`} alt={item.name} loading="lazy" className="h-16 w-16 rounded object-cover" />
         ) : isVideo ? (
           <VideoThumbnail
             src={`/api/files/${item.id}/download?disposition=inline`}

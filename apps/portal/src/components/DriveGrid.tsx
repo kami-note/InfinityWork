@@ -182,12 +182,15 @@ export function DriveGrid({
     setClipboard({ items: refs, mode });
   }
 
+  // Clipboard-aware paste that reads the latest clipboard from a ref so a
+  // single global keydown listener can call it without stale closures.
   async function paste(targetFolderId: string | null) {
-    if (!clipboard || clipboard.items.length === 0) return;
+    const cb = clipboardRef.current;
+    if (!cb || cb.items.length === 0) return;
     try {
-      if (clipboard.mode === "copy") await copyItemsAction(clipboard.items, targetFolderId);
+      if (cb.mode === "copy") await copyItemsAction(cb.items, targetFolderId);
       else {
-        await moveItemsAction(clipboard.items, targetFolderId);
+        await moveItemsAction(cb.items, targetFolderId);
         setClipboard(null);
       }
       router.refresh();
@@ -213,6 +216,31 @@ export function DriveGrid({
   }
 
   // Global keyboard shortcuts: select all, invert, copy/cut/paste, delete, escape.
+  // Use refs to avoid re-registering the listener every render while still
+  // operating on up-to-date state.
+  const selectedRef = useRef(selected);
+  const visibleItemsRef = useRef(visibleItems);
+  const clipboardRef = useRef(clipboard);
+  const menuRef = useRef(menu);
+  const folderIdRef = useRef(folderId);
+
+  // keep refs in sync
+  useEffect(() => {
+    selectedRef.current = selected;
+  }, [selected]);
+  useEffect(() => {
+    visibleItemsRef.current = visibleItems;
+  }, [visibleItems]);
+  useEffect(() => {
+    clipboardRef.current = clipboard;
+  }, [clipboard]);
+  useEffect(() => {
+    menuRef.current = menu;
+  }, [menu]);
+  useEffect(() => {
+    folderIdRef.current = folderId;
+  }, [folderId]);
+
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (isTypingTarget()) return;
@@ -220,26 +248,28 @@ export function DriveGrid({
 
       if (meta && e.key.toLowerCase() === "a") {
         e.preventDefault();
-        setSelected(new Set(visibleItems.map((i) => i.id)));
+        setSelected(new Set(visibleItemsRef.current.map((i) => i.id)));
       } else if (meta && e.key.toLowerCase() === "i") {
         e.preventDefault();
-        setSelected(new Set(visibleItems.filter((i) => !selected.has(i.id)).map((i) => i.id)));
+        setSelected(new Set(visibleItemsRef.current.filter((i) => !selectedRef.current.has(i.id)).map((i) => i.id)));
       } else if (meta && e.key.toLowerCase() === "c") {
-        copySelection("copy");
+        // create a clipboard snapshot from the latest visible items / selection
+        const refs = visibleItemsRef.current.filter((i) => selectedRef.current.has(i.id)).map((i) => ({ id: i.id, kind: i.kind }));
+        setClipboard({ items: refs, mode: "copy" });
       } else if (meta && e.key.toLowerCase() === "x") {
-        copySelection("cut");
+        const refs = visibleItemsRef.current.filter((i) => selectedRef.current.has(i.id)).map((i) => ({ id: i.id, kind: i.kind }));
+        setClipboard({ items: refs, mode: "cut" });
       } else if (meta && e.key.toLowerCase() === "v") {
-        void paste(folderId);
+        void paste(folderIdRef.current);
       } else if (e.key === "Delete" || e.key === "Backspace") {
-        if (selected.size > 0) void handleBulkDelete();
-      } else if (e.key === "Escape" && !menu) {
+        if (selectedRef.current.size > 0) void handleBulkDelete();
+      } else if (e.key === "Escape" && !menuRef.current) {
         setSelected(new Set());
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-bound each render so closures see fresh selected/clipboard/visibleItems
-  });
+  }, []);
 
   // Rubber-band marquee selection: mousedown on empty space starts a drag rectangle;
   // any item tile whose bounding box intersects it gets selected.
