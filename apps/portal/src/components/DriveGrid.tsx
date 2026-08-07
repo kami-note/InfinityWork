@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { useRouter } from "next/navigation";
 import { Trash2, List, LayoutGrid, ClipboardPaste } from "lucide-react";
 import { DOCUMENT_MIME_TYPE } from "@infinitywork/shared";
@@ -373,20 +374,20 @@ export function DriveGrid({
             onSort={handleSort}
           />
         ) : (
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 md:grid-cols-6">
-            {visibleItems.map((item) => (
-              <DriveItemTile
-                key={item.id}
-                item={item}
-                selected={selected.has(item.id)}
-                cut={clipboard?.mode === "cut" && clipboard.items.some((i) => i.id === item.id)}
-                onToggleSelect={() => toggleSelect(item.id)}
-                onOpen={(e) => handleItemClick(item, e)}
-                onMenu={(x, y) => setMenu({ position: { x, y }, item })}
-                onDragStart={() => handleDragStart(item)}
-                onDropItems={() => void handleDrop(item.id)}
-              />
-            ))}
+          // Virtualized grid view: calculate columns from container width to
+          // match the Tailwind breakpoints used in the non-virtualized grid.
+          <div ref={containerRef} className="relative">
+            <GridVirtualized
+              items={visibleItems}
+              colsRef={containerRef}
+              selected={selected}
+              clipboard={clipboard}
+              onToggleSelect={toggleSelect}
+              onOpen={handleItemClick}
+              onMenu={(x, y, item) => setMenu({ position: { x, y }, item })}
+              onDragStart={handleDragStart}
+              onDropItems={handleDrop}
+            />
           </div>
         )}
 
@@ -440,6 +441,94 @@ export function DriveGrid({
           onClose={() => setShareTarget(null)}
         />
       )}
+    </div>
+  );
+}
+
+function GridVirtualized({
+  items,
+  colsRef,
+  selected,
+  clipboard,
+  onToggleSelect,
+  onOpen,
+  onMenu,
+  onDragStart,
+  onDropItems,
+}: {
+  items: DriveItem[];
+  colsRef: React.RefObject<HTMLElement | null>;
+  selected: Set<string>;
+  clipboard: { items: { id: string; kind: "file" | "folder" }[]; mode: "copy" | "cut" } | null;
+  onToggleSelect: (id: string) => void;
+  onOpen: (item: DriveItem, e: React.MouseEvent) => void;
+  onMenu: (x: number, y: number, item: DriveItem) => void;
+  onDragStart: (item: DriveItem) => void;
+  onDropItems: (targetFolderId: string) => void;
+}) {
+  const rowHeight = 220; // estimated tile height including padding/gap
+  const [cols, setCols] = useState(2);
+
+  // determine columns based on container width to mirror Tailwind breakpoints:
+  // base: 2, sm (>=640):4, md (>=768):6
+  useEffect(() => {
+    function update() {
+      const width = colsRef.current?.clientWidth ?? window.innerWidth;
+      if (width >= 768) setCols(6);
+      else if (width >= 640) setCols(4);
+      else setCols(2);
+    }
+    update();
+    const ro = new ResizeObserver(update);
+    if (colsRef.current) ro.observe(colsRef.current);
+    else ro.observe(document.documentElement);
+    return () => ro.disconnect();
+  }, [colsRef]);
+
+  const rowCount = Math.max(1, Math.ceil(items.length / cols));
+
+  const virtualizer = useVirtualizer({
+    count: rowCount,
+    estimateSize: () => rowHeight,
+    getScrollElement: () => document.scrollingElement,
+    overscan: 4,
+  });
+
+  return (
+    <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
+      {virtualizer.getVirtualItems().map((v) => {
+        const rowIndex = v.index;
+        const start = rowIndex * cols;
+        const rowItems = items.slice(start, start + cols);
+        return (
+          <div
+            key={rowIndex}
+            style={{ position: "absolute", top: v.start, left: 0, right: 0, height: v.size }}
+            className="flex gap-2 px-0"
+          >
+            {Array.from({ length: cols }).map((_, ci) => {
+              const idx = start + ci;
+              const item = items[idx];
+              return item ? (
+                <div key={item.id} style={{ width: `${100 / cols}%` }}>
+                  <DriveItemTile
+                    item={item}
+                    selected={selected.has(item.id)}
+                    cut={clipboard?.mode === "cut" && clipboard.items.some((i) => i.id === item.id)}
+                    onToggleSelect={() => onToggleSelect(item.id)}
+                    onOpen={(e) => onOpen(item, e)}
+                    onMenu={(x, y) => onMenu(x, y, item)}
+                    onDragStart={() => onDragStart(item)}
+                    onDropItems={() => onDropItems(item.id)}
+                  />
+                </div>
+              ) : (
+                <div key={`empty-${ci}`} style={{ width: `${100 / cols}%` }} />
+              );
+            })}
+          </div>
+        );
+      })}
     </div>
   );
 }
