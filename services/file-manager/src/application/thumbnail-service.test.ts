@@ -35,6 +35,18 @@ class MockStorageProvider implements StorageProvider {
   async delete(storageKey: string): Promise<void> {
     this.files.delete(storageKey);
   }
+
+  async copyFrom(storageKey: string, checksumSha256: string | null = null): Promise<StoredObject> {
+    const buffer = this.files.get(storageKey);
+    if (!buffer) throw new Error("Not found");
+    const newKey = `test-${Math.random()}`;
+    this.files.set(newKey, buffer);
+    return {
+      storageKey: newKey,
+      size: buffer.length,
+      checksumSha256: checksumSha256 ?? "fake-checksum",
+    };
+  }
 }
 
 describe("ThumbnailService", { skip: !runDbTests }, () => {
@@ -119,7 +131,7 @@ describe("ThumbnailService", { skip: !runDbTests }, () => {
     assert.ok(metadata.height! <= 256);
   });
 
-  it("should not trigger generation for non-image files", async () => {
+  it("should not trigger generation for non-thumbnailable files", async () => {
     await enqueueThumbnailGeneration(storage, nonImageFileId);
     await thumbnailQueue.onIdle();
 

@@ -1,4 +1,4 @@
-import { Folder, FileText, FileSpreadsheet, FileImage, FileArchive, File as FileGeneric } from "lucide-react";
+import { Folder, FileText, FileSpreadsheet, FileImage, FileVideo, FileArchive, File as FileGeneric } from "lucide-react";
 import { DOCUMENT_MIME_TYPE } from "@infinitywork/shared";
 
 /**
@@ -15,6 +15,9 @@ export function FileTypeIcon({ mimeType, size = 40 }: { mimeType: string; size?:
   }
   if (mimeType.startsWith("image/")) {
     return <FileImage size={size} className="text-purple-500 dark:text-purple-400" />;
+  }
+  if (mimeType.startsWith("video/")) {
+    return <FileVideo size={size} className="text-rose-500 dark:text-rose-400" />;
   }
   if (mimeType.includes("spreadsheet") || mimeType.includes("csv")) {
     return <FileSpreadsheet size={size} className="text-green-600 dark:text-green-400" />;

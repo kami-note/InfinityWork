@@ -8,8 +8,8 @@ import {
   fetchShareFile,
   fetchShareMeta,
   shareDownloadPath,
-  shareInlinePath,
   sharePagePath,
+  shareThumbnailPath,
   siblingVideos,
 } from "@/lib/public-share";
 
@@ -94,7 +94,7 @@ export default async function PublicSharePage({
               downloadUrl,
               upNext,
               upNextHrefFor: (id) => sharePagePath(token, { folderId: file.folderId, view: id }),
-              upNextThumbnailSrcFor: (id) => shareInlinePath(token, id),
+              upNextThumbnailSrcFor: (id) => shareThumbnailPath(token, id),
             }}
           />
         </FileViewShell>

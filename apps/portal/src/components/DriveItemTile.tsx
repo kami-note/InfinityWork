@@ -4,7 +4,6 @@ import { useState } from "react";
 import { MoreVertical, Check } from "lucide-react";
 import { DOCUMENT_MIME_TYPE } from "@infinitywork/shared";
 import { FileTypeIcon, FolderIcon } from "@/lib/file-icon";
-import { VideoThumbnail } from "./viewers/VideoThumbnail";
 import { formatSize } from "@/lib/format";
 
 export type DriveItem =
@@ -42,6 +41,7 @@ export function DriveItemTile({
   const [dragOver, setDragOver] = useState(false);
   const isImage = item.kind === "file" && item.mimeType.startsWith("image/");
   const isVideo = item.kind === "file" && item.mimeType.startsWith("video/");
+  const hasReadyThumbnail = (isImage || isVideo) && item.thumbnailStatus === "ready";
   const isDocument = item.kind === "file" && item.mimeType === DOCUMENT_MIME_TYPE;
   const isDropTarget = item.kind === "folder";
 
@@ -97,17 +97,12 @@ export function DriveItemTile({
       <div className="mb-2 flex h-16 w-16 items-center justify-center">
         {item.kind === "folder" ? (
           <FolderIcon size={48} />
-        ) : isImage && item.thumbnailStatus === "ready" ? (
+        ) : hasReadyThumbnail ? (
           // eslint-disable-next-line @next/next/no-img-element -- proxied through our own auth route, not a static asset Next can optimize
           <img
             src={`/api/files/${item.id}/thumbnail`}
             alt={item.name}
             loading="lazy"
-            className="h-16 w-16 rounded object-cover"
-          />
-        ) : isVideo ? (
-          <VideoThumbnail
-            src={`/api/files/${item.id}/download?disposition=inline`}
             className="h-16 w-16 rounded object-cover"
           />
         ) : (
