@@ -102,7 +102,7 @@ export async function emptyTrash(storage: StorageProvider, ownerId: string) {
   // Use a small concurrency limit (4) to reduce CPU/disk contention.
   const pLimit = (await import("p-limit")).default;
   const limit = pLimit(4);
-  await Promise.all(trashed.map((f) => limit(() => storage.delete(f.storageKey))));
+  await Promise.all(trashed.map((f: any) => limit(() => storage.delete(f.storageKey))));
   await prisma.file.deleteMany({ where: { ownerId, deletedAt: { not: null } } });
   return { deleted: trashed.length };
 }

@@ -32,7 +32,7 @@ export async function copyFolder(
   const limit = pLimit(4);
   // Copy files in parallel within a concurrency limit.
   await Promise.all(
-    childFiles.map((file) =>
+    childFiles.map((file: any) =>
       limit(() =>
         copyFile(storage, {
           id: file.id,
@@ -46,7 +46,7 @@ export async function copyFolder(
 
   // Recurse into subfolders in parallel within the same concurrency limit.
   await Promise.all(
-    childFolders.map((childFolder) =>
+    childFolders.map((childFolder: any) =>
       limit(() =>
         copyFolder(storage, {
           id: childFolder.id,

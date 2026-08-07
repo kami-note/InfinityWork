@@ -20,6 +20,10 @@ function roleSatisfies(granted: AclRole, minRole: AclRole): boolean {
   return ROLE_RANK[granted] >= ROLE_RANK[minRole];
 }
 
+function roleRank(role: AclRole): number {
+  return ROLE_RANK[role];
+}
+
 /**
  * Resource-level ACL, separate from the RBAC permission strings checked by
  * the auth middleware. RBAC answers "can this user upload files at all";
@@ -123,7 +127,7 @@ export async function getEffectiveFileRole(fileId: string, userId: string): Prom
       const folderGrant = await prisma.folderPermission.findUnique({
         where: { folderId_userId: { folderId: folder.id, userId } },
       });
-      if (folderGrant && (!best || ROLE_RANK[folderGrant.role] > ROLE_RANK[best])) {
+      if (folderGrant && (!best || roleRank(folderGrant.role) > roleRank(best))) {
         best = folderGrant.role;
       }
       current = folder.parentId;

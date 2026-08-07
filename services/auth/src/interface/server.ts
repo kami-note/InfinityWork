@@ -13,6 +13,7 @@ import {
   findUserWithPermissionsById,
   findUserPublicByEmail,
 } from "../infrastructure/user-repository.js";
+import { startCleanupScheduler } from "../infrastructure/refresh-token-repository.js";
 
 const JWT_SECRET = process.env.JWT_SECRET!;
 if (!JWT_SECRET) throw new Error("JWT_SECRET is required");
