@@ -528,6 +528,29 @@ app.get(
   },
 );
 
+app.get(
+  "/files/:id/thumbnail",
+  { preHandler: app.requirePermission(PERMISSIONS.files.file.download) },
+  async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try {
+      await requireFileRole(id, request.user!.sub, "viewer");
+    } catch (err) {
+      return sendAclError(reply, err);
+    }
+    const file = await fileService.getFile(id);
+
+    if (file.thumbnailStatus !== "ready" || !file.thumbnailStorageKey) {
+      return reply.code(404).send({ error: "thumbnail_not_ready" });
+    }
+
+    reply.header("Content-Type", "image/jpeg");
+    reply.header("Cache-Control", "public, max-age=31536000, immutable");
+
+    return reply.send(storage.read(file.thumbnailStorageKey));
+  },
+);
+
 app.patch(
   "/files/:id",
   { preHandler: app.requirePermission(PERMISSIONS.files.file.rename) },
@@ -731,6 +754,7 @@ app.get("/public/links/:token", async (request, reply) => {
           name: file.name,
           size: file.size,
           mimeType: file.mimeType,
+          thumbnailStatus: file.thumbnailStatus,
           updatedAt: file.updatedAt,
         },
       };
@@ -789,6 +813,7 @@ app.get("/public/links/:token/children", async (request, reply) => {
           folderId: true,
           size: true,
           mimeType: true,
+          thumbnailStatus: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -839,6 +864,7 @@ app.get("/public/links/:token/files/:fileId", async (request, reply) => {
       name: file.name,
       size: file.size,
       mimeType: file.mimeType,
+      thumbnailStatus: file.thumbnailStatus,
       folderId: file.folderId,
       updatedAt: file.updatedAt,
     };

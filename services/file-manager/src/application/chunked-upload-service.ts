@@ -12,6 +12,7 @@ import {
 } from "@infinitywork/shared";
 import type { StorageProvider } from "../domain/storage-provider.js";
 import { prisma } from "../infrastructure/prisma.js";
+import { enqueueThumbnailGeneration } from "./thumbnail-service.js";
 
 export type UploadSessionStatus = "receiving" | "assembling" | "ready" | "failed";
 
@@ -23,6 +24,7 @@ export interface PersistedFileInput {
   size: number;
   mimeType: string;
   checksumSha256: string;
+  thumbnailStatus?: string;
 }
 
 export type PersistFileFn = (data: PersistedFileInput) => Promise<{ id: string }>;
@@ -397,6 +399,7 @@ export class ChunkedUploadService {
         throw new Error(`assembled size ${stored.size} != expected ${meta.size}`);
       }
 
+      const isImage = meta.mimeType.startsWith("image/");
       const file = await this.persistFile({
         name: meta.name,
         folderId: meta.folderId,
@@ -405,7 +408,14 @@ export class ChunkedUploadService {
         size: stored.size,
         mimeType: meta.mimeType,
         checksumSha256: stored.checksumSha256,
+        thumbnailStatus: isImage ? "pending" : "none",
       });
+
+      if (isImage) {
+        enqueueThumbnailGeneration(this.storage, file.id).catch((err) => {
+          console.error("Failed to enqueue thumbnail generation:", err);
+        });
+      }
 
       await this.removeParts(uploadId);
 

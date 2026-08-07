@@ -154,7 +154,16 @@ export function DriveListView({
                 <FolderIcon size={20} />
               ) : isImage ? (
                 // eslint-disable-next-line @next/next/no-img-element -- proxied through our own auth route
-                <img src={`/api/files/${item.id}/download`} alt="" loading="lazy" className="h-5 w-5 rounded object-cover" />
+                <img
+                  src={
+                    item.thumbnailStatus === "ready"
+                      ? `/api/files/${item.id}/thumbnail`
+                      : `/api/files/${item.id}/download`
+                  }
+                  alt=""
+                  loading="lazy"
+                  className="h-5 w-5 rounded object-cover"
+                />
               ) : isVideo ? (
                 <VideoThumbnail src={`/api/files/${item.id}/download?disposition=inline`} className="h-5 w-5 rounded object-cover" />
               ) : (

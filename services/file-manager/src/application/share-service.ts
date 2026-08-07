@@ -48,6 +48,7 @@ export async function listSharedWithMe(userId: string) {
             folderId: true,
             size: true,
             mimeType: true,
+            thumbnailStatus: true,
             createdAt: true,
             updatedAt: true,
             ownerId: true,
