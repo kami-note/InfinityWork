@@ -9,7 +9,7 @@
     "start": "node dist/interface/server.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
-    "test": "node --import tsx --test src/application/chunked-upload-service.test.ts src/application/share-service.test.ts src/application/access-control.test.ts"
+    "test": "node --import tsx --test src/application/chunked-upload-service.test.ts src/application/share-service.test.ts src/application/access-control.test.ts src/application/thumbnail-service.test.ts"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.1",

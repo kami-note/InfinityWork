@@ -4,7 +4,7 @@ import { Readable } from "node:stream";
 import { prisma } from "../infrastructure/prisma.js";
 import type { StorageProvider } from "../domain/storage-provider.js";
 
-const queue = new PQueue({ concurrency: 2 });
+export const thumbnailQueue = new PQueue({ concurrency: 2 });
 
 export async function enqueueThumbnailGeneration(storage: StorageProvider, fileId: string) {
   const file = await prisma.file.findUnique({ where: { id: fileId } });
@@ -19,7 +19,7 @@ export async function enqueueThumbnailGeneration(storage: StorageProvider, fileI
   });
 
   // Enqueue the actual processing
-  queue.add(async () => {
+  thumbnailQueue.add(async () => {
     try {
       // Re-fetch to ensure it wasn't deleted
       const currentFile = await prisma.file.findUnique({ where: { id: fileId } });
