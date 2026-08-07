@@ -2,13 +2,14 @@ import type { Readable } from "node:stream";
 import { prisma } from "../infrastructure/prisma.js";
 import type { StorageProvider } from "../domain/storage-provider.js";
 import { enqueueThumbnailGeneration } from "./thumbnail-service.js";
+import { isThumbnailableMime } from "./thumbnailable.js";
 
 export async function uploadFile(
   storage: StorageProvider,
   params: { ownerId: string; folderId: string | null; name: string; mimeType: string; stream: Readable },
 ) {
   const stored = await storage.write(params.stream);
-  const isImage = params.mimeType.startsWith("image/");
+  const wantsThumbnail = isThumbnailableMime(params.mimeType);
   const file = await prisma.file.create({
     data: {
       name: params.name,
@@ -18,11 +19,11 @@ export async function uploadFile(
       size: stored.size,
       mimeType: params.mimeType,
       checksumSha256: stored.checksumSha256,
-      thumbnailStatus: isImage ? "pending" : "none",
+      thumbnailStatus: wantsThumbnail ? "pending" : "none",
     },
   });
 
-  if (isImage) {
+  if (wantsThumbnail) {
     enqueueThumbnailGeneration(storage, file.id).catch((err) => {
       console.error("Failed to enqueue thumbnail generation:", err);
     });
@@ -43,7 +44,7 @@ export async function updateFileContent(
 ) {
   const existing = await prisma.file.findUniqueOrThrow({ where: { id: params.id } });
   const stored = await storage.write(params.stream);
-  const isImage = params.mimeType.startsWith("image/");
+  const wantsThumbnail = isThumbnailableMime(params.mimeType);
   const updated = await prisma.file.update({
     where: { id: params.id },
     data: {
@@ -51,12 +52,12 @@ export async function updateFileContent(
       size: stored.size,
       mimeType: params.mimeType,
       checksumSha256: stored.checksumSha256,
-      thumbnailStatus: isImage ? "pending" : "none",
+      thumbnailStatus: wantsThumbnail ? "pending" : "none",
       thumbnailStorageKey: null,
     },
   });
 
-  if (isImage) {
+  if (wantsThumbnail) {
     enqueueThumbnailGeneration(storage, updated.id).catch((err) => {
       console.error("Failed to enqueue thumbnail generation:", err);
     });
@@ -82,15 +83,16 @@ export async function copyFile(
   params: { id: string; ownerId: string; targetFolderId: string | null; rename: boolean },
 ) {
   const original = await prisma.file.findUniqueOrThrow({ where: { id: params.id } });
-  const isImage = original.mimeType.startsWith("image/");
+  const wantsThumbnail = isThumbnailableMime(original.mimeType);
 
   // Avoid recomputing SHA-256: ask storage to copy the existing object and
   // reuse the checksum already stored in the DB for the original file.
   const stored = await storage.copyFrom(original.storageKey, original.checksumSha256);
 
   // If the original already has a ready thumbnail, copy those bytes too
-  // instead of re-running sharp — the copy is pixel-identical to the source.
-  const hasReadyThumbnail = isImage && original.thumbnailStatus === "ready" && original.thumbnailStorageKey;
+  // instead of re-running sharp/ffmpeg — the copy is pixel-identical to the source.
+  const hasReadyThumbnail =
+    wantsThumbnail && original.thumbnailStatus === "ready" && original.thumbnailStorageKey;
   const copiedThumbnail = hasReadyThumbnail
     ? await storage.copyFrom(original.thumbnailStorageKey!)
     : null;
@@ -105,12 +107,12 @@ export async function copyFile(
       mimeType: original.mimeType,
       // Persist original checksum to avoid recomputing on copy.
       checksumSha256: original.checksumSha256,
-      thumbnailStatus: isImage ? (copiedThumbnail ? "ready" : "pending") : "none",
+      thumbnailStatus: wantsThumbnail ? (copiedThumbnail ? "ready" : "pending") : "none",
       thumbnailStorageKey: copiedThumbnail?.storageKey ?? null,
     },
   });
 
-  if (isImage && !copiedThumbnail) {
+  if (wantsThumbnail && !copiedThumbnail) {
     enqueueThumbnailGeneration(storage, file.id).catch((err) => {
       console.error("Failed to enqueue thumbnail generation:", err);
     });

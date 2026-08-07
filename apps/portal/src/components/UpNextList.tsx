@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { Play } from "lucide-react";
-import { VideoThumbnail } from "./viewers/VideoThumbnail";
+import { FileTypeIcon } from "@/lib/file-icon";
 import { formatSize } from "@/lib/format";
 import type { FileDto } from "@/lib/file-manager-client";
 
 export function UpNextList({
   videos,
   hrefFor = (id) => `/view/${id}`,
-  thumbnailSrcFor = (id) => `/api/files/${id}/download?disposition=inline`,
+  thumbnailSrcFor = (id) => `/api/files/${id}/thumbnail`,
 }: {
   videos: FileDto[];
   hrefFor?: (id: string) => string;
@@ -28,7 +28,17 @@ export function UpNextList({
             className="flex items-center gap-3 rounded p-2 text-sm hover:bg-neutral-100 dark:hover:bg-neutral-900"
           >
             <span className="relative flex h-12 w-20 shrink-0 items-center justify-center overflow-hidden rounded bg-neutral-200 dark:bg-neutral-800">
-              <VideoThumbnail src={thumbnailSrcFor(video.id)} className="h-full w-full object-cover" />
+              {video.thumbnailStatus === "ready" ? (
+                // eslint-disable-next-line @next/next/no-img-element -- proxied through our own auth/share route
+                <img
+                  src={thumbnailSrcFor(video.id)}
+                  alt=""
+                  loading="lazy"
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <FileTypeIcon mimeType={video.mimeType} size={28} />
+              )}
               <Play size={16} className="absolute text-white drop-shadow" />
             </span>
             <span className="min-w-0 flex-1">

@@ -13,6 +13,7 @@ import {
 import type { StorageProvider } from "../domain/storage-provider.js";
 import { prisma } from "../infrastructure/prisma.js";
 import { enqueueThumbnailGeneration } from "./thumbnail-service.js";
+import { isThumbnailableMime } from "./thumbnailable.js";
 
 export type UploadSessionStatus = "receiving" | "assembling" | "ready" | "failed";
 
@@ -399,7 +400,7 @@ export class ChunkedUploadService {
         throw new Error(`assembled size ${stored.size} != expected ${meta.size}`);
       }
 
-      const isImage = meta.mimeType.startsWith("image/");
+      const wantsThumbnail = isThumbnailableMime(meta.mimeType);
       const file = await this.persistFile({
         name: meta.name,
         folderId: meta.folderId,
@@ -408,10 +409,10 @@ export class ChunkedUploadService {
         size: stored.size,
         mimeType: meta.mimeType,
         checksumSha256: stored.checksumSha256,
-        thumbnailStatus: isImage ? "pending" : "none",
+        thumbnailStatus: wantsThumbnail ? "pending" : "none",
       });
 
-      if (isImage) {
+      if (wantsThumbnail) {
         enqueueThumbnailGeneration(this.storage, file.id).catch((err) => {
           console.error("Failed to enqueue thumbnail generation:", err);
         });

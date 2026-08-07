@@ -16,7 +16,12 @@ export async function proxyFileManagerDownload(
   const ifNoneMatch = request.headers.get("if-none-match");
   if (ifNoneMatch) headers["If-None-Match"] = ifNoneMatch;
 
-  const res = await fetch(`${FILE_MANAGER_SERVICE_URL}${upstreamPath}${qs}`, { headers });
+  const res = await fetch(`${FILE_MANAGER_SERVICE_URL}${upstreamPath}${qs}`, {
+    headers,
+    // When the browser aborts (seek, navigate away, cancel preload), stop
+    // reading from file-manager so the backend doesn't keep pumping bytes.
+    signal: request.signal,
+  });
 
   if (!res.body && res.status !== 416 && res.status !== 304) {
     return NextResponse.json({ error: "download_failed" }, { status: res.status || 500 });

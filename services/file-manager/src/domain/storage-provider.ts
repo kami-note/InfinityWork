@@ -28,4 +28,9 @@ export interface StorageProvider {
    * avoid recomputing hashes when the domain already knows the checksum.
    */
   copyFrom(storageKey: string, checksumSha256?: string | null): Promise<StoredObject>;
+  /**
+   * Optional absolute filesystem path for tools that can seek on disk (e.g. ffmpeg).
+   * S3-compatible backends leave this undefined; callers must fall back to `read()`.
+   */
+  localPath?(storageKey: string): string;
 }

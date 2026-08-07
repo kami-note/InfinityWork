@@ -1,7 +1,7 @@
 FROM node:24-alpine AS base
 WORKDIR /repo
-# See services/auth/Dockerfile for why openssl is required here.
-RUN apk add --no-cache openssl
+# openssl: Prisma engines on Alpine. ffmpeg: one-frame video thumbnails on upload.
+RUN apk add --no-cache openssl ffmpeg
 
 COPY package.json ./
 COPY packages/shared/package.json packages/shared/package.json
@@ -18,7 +18,7 @@ RUN npm run build -w services/file-manager
 FROM node:24-alpine AS runtime
 WORKDIR /repo
 ENV NODE_ENV=production
-RUN apk add --no-cache openssl
+RUN apk add --no-cache openssl ffmpeg
 COPY --from=base /repo/node_modules node_modules
 COPY --from=base /repo/packages/shared/dist packages/shared/dist
 COPY --from=base /repo/packages/shared/package.json packages/shared/package.json

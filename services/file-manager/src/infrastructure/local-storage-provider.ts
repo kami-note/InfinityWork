@@ -24,6 +24,11 @@ export class LocalStorageProvider implements StorageProvider {
     return join(this.root, storageKey.slice(0, 2), storageKey);
   }
 
+  /** Exposes the on-disk path so ffmpeg can seek without piping through Node. */
+  localPath(storageKey: string): string {
+    return this.pathFor(storageKey);
+  }
+
   async write(stream: Readable): Promise<StoredObject> {
     const storageKey = randomUUID();
     const destPath = this.pathFor(storageKey);

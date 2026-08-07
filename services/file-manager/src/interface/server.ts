@@ -19,9 +19,12 @@ import {
   type ShareRole,
 } from "../application/access-control.js";
 import { ChunkedUploadError, ChunkedUploadService } from "../application/chunked-upload-service.js";
+import { DEFAULT_MAX_RANGE_BYTES, resolveByteRange } from "../application/byte-range.js";
 
 const STORAGE_ROOT = process.env.STORAGE_ROOT ?? "/data/storage";
 const MAX_UPLOAD_BYTES = Number(process.env.STORAGE_MAX_UPLOAD_BYTES ?? 500 * 1024 * 1024);
+/** Hard cap per 206 response — stops `Range: bytes=0-` from draining a whole video. */
+const MAX_RANGE_BYTES = Number(process.env.DOWNLOAD_MAX_RANGE_BYTES ?? DEFAULT_MAX_RANGE_BYTES);
 const storage = new LocalStorageProvider(STORAGE_ROOT, MAX_UPLOAD_BYTES);
 const chunkedUploads = new ChunkedUploadService(STORAGE_ROOT, storage, { maxUploadBytes: MAX_UPLOAD_BYTES });
 
@@ -71,27 +74,16 @@ async function streamFileDownload(
 
   const totalSize = Number(file.size);
   const rangeHeader = request.headers.range;
-  const match = rangeHeader ? /^bytes=(\d*)-(\d*)$/.exec(rangeHeader) : null;
 
-  if (match) {
-    const [, startStr, endStr] = match;
-    let start = startStr ? parseInt(startStr, 10) : undefined;
-    let end = endStr ? parseInt(endStr, 10) : undefined;
-
-    if (start === undefined && end !== undefined) {
-      start = Math.max(totalSize - end, 0);
-      end = totalSize - 1;
-    } else if (end === undefined) {
-      end = totalSize - 1;
-    }
-
-    if (start === undefined || start > end! || start >= totalSize) {
+  if (rangeHeader) {
+    const resolved = resolveByteRange(rangeHeader, totalSize, MAX_RANGE_BYTES);
+    if (!resolved) {
       reply.code(416);
       reply.header("Content-Range", `bytes */${totalSize}`);
       return reply.send();
     }
 
-    end = Math.min(end!, totalSize - 1);
+    const { start, end } = resolved;
     reply.code(206);
     reply.header("Content-Range", `bytes ${start}-${end}/${totalSize}`);
     reply.header("Content-Length", end - start + 1);
@@ -100,6 +92,18 @@ async function streamFileDownload(
 
   reply.header("Content-Length", totalSize);
   return reply.send(storage.read(file.storageKey));
+}
+
+function streamThumbnail(
+  reply: import("fastify").FastifyReply,
+  file: Awaited<ReturnType<typeof fileService.getFile>>,
+) {
+  if (file.thumbnailStatus !== "ready" || !file.thumbnailStorageKey) {
+    return reply.code(404).send({ error: "thumbnail_not_ready" });
+  }
+  reply.header("Content-Type", "image/jpeg");
+  reply.header("Cache-Control", "public, max-age=31536000, immutable");
+  return reply.send(storage.read(file.thumbnailStorageKey));
 }
 
 app.get("/health", async () => ({ status: "ok" }));
@@ -539,15 +543,7 @@ app.get(
       return sendAclError(reply, err);
     }
     const file = await fileService.getFile(id);
-
-    if (file.thumbnailStatus !== "ready" || !file.thumbnailStorageKey) {
-      return reply.code(404).send({ error: "thumbnail_not_ready" });
-    }
-
-    reply.header("Content-Type", "image/jpeg");
-    reply.header("Cache-Control", "public, max-age=31536000, immutable");
-
-    return reply.send(storage.read(file.thumbnailStorageKey));
+    return streamThumbnail(reply, file);
   },
 );
 
@@ -848,6 +844,24 @@ app.get("/public/links/:token/download", async (request, reply) => {
   }
 });
 
+app.get("/public/links/:token/thumbnail", async (request, reply) => {
+  const { token } = request.params as { token: string };
+  try {
+    const link = await shareService.resolveShareLink(token);
+    if (link.targetType !== "file") {
+      return reply.code(400).send({ error: "not_a_file_link" });
+    }
+    const file = await fileService.getFile(link.targetId);
+    if (file.deletedAt) return reply.code(404).send({ error: "not_found" });
+    return streamThumbnail(reply, file);
+  } catch (err) {
+    if (err instanceof shareService.InvalidShareLinkError) {
+      return reply.code(404).send({ error: err.message });
+    }
+    throw err;
+  }
+});
+
 app.get("/public/links/:token/files/:fileId", async (request, reply) => {
   const { token, fileId } = request.params as { token: string; fileId: string };
   try {
@@ -888,6 +902,26 @@ app.get("/public/links/:token/files/:fileId/download", async (request, reply) =>
     const file = await fileService.getFile(fileId);
     if (file.deletedAt) return reply.code(404).send({ error: "not_found" });
     return streamFileDownload(request, reply, file);
+  } catch (err) {
+    if (err instanceof shareService.InvalidShareLinkError) {
+      return reply.code(404).send({ error: err.message });
+    }
+    throw err;
+  }
+});
+
+app.get("/public/links/:token/files/:fileId/thumbnail", async (request, reply) => {
+  const { token, fileId } = request.params as { token: string; fileId: string };
+  try {
+    const link = await shareService.resolveShareLink(token);
+    if (link.targetType !== "folder") {
+      return reply.code(400).send({ error: "not_a_folder_link" });
+    }
+    const under = await isFileUnderFolder(fileId, link.targetId);
+    if (!under) return reply.code(403).send({ error: "forbidden" });
+    const file = await fileService.getFile(fileId);
+    if (file.deletedAt) return reply.code(404).send({ error: "not_found" });
+    return streamThumbnail(reply, file);
   } catch (err) {
     if (err instanceof shareService.InvalidShareLinkError) {
       return reply.code(404).send({ error: err.message });

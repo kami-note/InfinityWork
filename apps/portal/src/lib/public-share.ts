@@ -63,6 +63,14 @@ export function shareInlinePath(token: string, fileId?: string) {
   return `${shareDownloadPath(token, fileId)}?disposition=inline`;
 }
 
+/** Portal proxy URL for a public share JPEG thumbnail (when ready). */
+export function shareThumbnailPath(token: string, fileId?: string) {
+  if (fileId) {
+    return `/api/share/${encodeURIComponent(token)}/files/${encodeURIComponent(fileId)}/thumbnail`;
+  }
+  return `/api/share/${encodeURIComponent(token)}/thumbnail`;
+}
+
 export function toFileDto(file: PublicShareFile): FileDto {
   return {
     id: file.id,

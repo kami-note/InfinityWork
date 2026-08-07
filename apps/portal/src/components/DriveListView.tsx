@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowUp, ArrowDown, MoreVertical } from "lucide-react";
 import { DOCUMENT_MIME_TYPE } from "@infinitywork/shared";
 import { FileTypeIcon, FolderIcon } from "@/lib/file-icon";
-import { VideoThumbnail } from "./viewers/VideoThumbnail";
 import { formatSize, formatDate } from "@/lib/format";
 import type { DriveItem } from "./DriveItemTile";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -113,6 +112,7 @@ export function DriveListView({
             const isSelected = selected.has(item.id);
             const isImage = item.kind === "file" && item.mimeType.startsWith("image/");
             const isVideo = item.kind === "file" && item.mimeType.startsWith("video/");
+            const hasReadyThumbnail = (isImage || isVideo) && item.thumbnailStatus === "ready";
             const isDocument = item.kind === "file" && item.mimeType === DOCUMENT_MIME_TYPE;
             const isDropTarget = item.kind === "folder";
 
@@ -171,11 +171,9 @@ export function DriveListView({
                 <div className="flex min-w-0 items-center gap-2">
                   {item.kind === "folder" ? (
                     <FolderIcon size={20} />
-                  ) : isImage && item.thumbnailStatus === "ready" ? (
+                  ) : hasReadyThumbnail ? (
                     // eslint-disable-next-line @next/next/no-img-element -- proxied through our own auth route
                     <img src={`/api/files/${item.id}/thumbnail`} alt="" loading="lazy" className="h-5 w-5 rounded object-cover" />
-                  ) : isVideo ? (
-                    <VideoThumbnail src={`/api/files/${item.id}/download?disposition=inline`} className="h-5 w-5 rounded object-cover" />
                   ) : (
                     <FileTypeIcon mimeType={item.mimeType} size={20} />
                   )}
